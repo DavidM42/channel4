@@ -209,20 +209,22 @@ void ICACHE_FLASH_ATTR DrawFrame(  )
 		CNFGTackRectangle( 70, 110, 180+200, 150 );		
 		CNFGColor( 16 );
 		if( framessostate > 160 ) newstate = 6;
-	case 4:
-		CNFGPenY += 14*7;
-		CNFGPenX += 60;
-		CNFGDrawText( "38x14 TEXT MODE", 2 );
+		break; //Used to fall through into case 4 for its text.  Without it, this would run on into case 3.
+	// commented out and skipped for now since gfx part looks broken
+	// case 4:
+	// 	CNFGPenY += 14*7;
+	// 	CNFGPenX += 60;
+	// 	CNFGDrawText( "38x14 TEXT MODE", 2 );
 
-		CNFGPenY += 14;
-		CNFGPenX -= 5;
-		CNFGDrawText( "...on 232x220 gfx", 2 );
+	// 	CNFGPenY += 14;
+	// 	CNFGPenX -= 5;
+	// 	CNFGDrawText( "...on 232x220 gfx", 2 );
 
-		if( framessostate > 60 && showstate == 4 )
-		{
-			newstate = 5;
-		}
-		break;
+	// 	if( framessostate > 60 && showstate == 4 )
+	// 	{
+	// 		newstate = 5;
+	// 	}
+	// 	break;
 	case 3:
 		for( y = 0; y < 14; y++ )
 		{
@@ -241,7 +243,8 @@ void ICACHE_FLASH_ATTR DrawFrame(  )
 			lastct[x] = 0;
 			CNFGDrawText( lastct, 2 );
 			CNFGPenY += 14;
-			if( framessostate > 120 ) newstate = 4;
+			// skip state 4 for now since gfx looks broken
+			if( framessostate > 120 ) newstate = 5;
 		}
 		break;
 	case 2:

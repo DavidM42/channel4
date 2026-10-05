@@ -1,3 +1,13 @@
 image.elf
 image.lst
 image.map
+
+# Tools built on your own machine by tablemaker/Makefile and web/Makefile
+tablemaker/synthtables
+tablemaker/MakeCbTables
+web/mfsmaker
+web/pushtodev
+web/execute_reflash
+
+# Debug symbols macOS puts next to them
+*.dSYM/

@@ -74,6 +74,30 @@ Extra copyright info:
   #define COLORBURST_INTERVAL 4
 #endif
 
+//Sync, colorburst and black before the framebuffer starts on a line.
+#define HDR_SPD (NORMAL_SYNC_INTERVAL+1+COLORBURST_INTERVAL+11)
+
+#ifdef WHITE_BORDER
+  //Fills the visible area left, right and above the framebuffer with something bright instead of black.  TVs that don't
+  //hold their black level (most small black and white ones) show a mostly dark picture as gray, this gives them something
+  //bright to go by.  Left/right are in 32-bit words and stay clear of the porches, the top lines skipped are the ones in
+  //vertical blanking.  The lines below the picture stay black: bright lines running right up to vertical sync made the
+  //whole picture bounce on the TV this was tried on.
+  //BORDER_LEVEL is the color to use.  White is the brightest, but it glows.
+  #ifndef BORDER_LEVEL
+    #define BORDER_LEVEL WHITE_LEVEL
+  #endif
+  #ifdef PAL
+    #define BORDER_LEFT      5
+    #define BORDER_RIGHT     7
+    #define BORDER_SKIP_TOP 18
+  #else
+    #define BORDER_LEFT      4
+    #define BORDER_RIGHT    10
+    #define BORDER_SKIP_TOP 13
+  #endif
+#endif
+
 #define I2SDMABUFLEN (LINE_BUFFER_LENGTH)		//Length of one buffer, in 32-bit words.
 //#define LINE16LEN (I2SDMABUFLEN*2)
 #define LINE32LEN I2SDMABUFLEN
@@ -118,6 +142,9 @@ const uint32_t * tableend = &premodulated_table[PREMOD_ENTRIES*PREMOD_SIZE];
 uint32_t * curdma;
 
 uint8_t pixline; //line number currently being written out.
+#ifdef WHITE_BORDER
+uint8_t marginline; //how many of the margin lines above the picture are out already.
+#endif
 
 //Each "qty" is 32 bits, or .4us
 LOCAL void fillwith( uint16_t qty, uint8_t color )
@@ -143,6 +170,9 @@ LOCAL void fillwith( uint16_t qty, uint8_t color )
 LOCAL void FT_STA() // Short Sync
 {
 	pixline = 0; //Reset the framebuffer out line count (can be done multiple times)
+#ifdef WHITE_BORDER
+	marginline = 0;
+#endif
 
 	fillwith( SHORT_SYNC_INTERVAL, SYNC_LEVEL );
 	fillwith( LONG_SYNC_INTERVAL, BLACK_LEVEL );
@@ -171,6 +201,16 @@ LOCAL void FT_B() // Black
 	fillwith( NORMAL_SYNC_INTERVAL, SYNC_LEVEL );
 	fillwith( 2, BLACK_LEVEL );
 	fillwith( COLORBURST_INTERVAL, COLORBURST_LEVEL );
+#ifdef WHITE_BORDER
+	//Above the picture and past vertical blanking.
+	if( !pixline && marginline++ >= BORDER_SKIP_TOP )
+	{
+		fillwith( 10 - BORDER_LEFT, BLACK_LEVEL );
+		fillwith( BORDER_LEFT + FBW2 + BORDER_RIGHT, BORDER_LEVEL );
+		fillwith( LINE32LEN - (HDR_SPD+FBW2+BORDER_RIGHT), BLACK_LEVEL );
+		return;
+	}
+#endif
 	fillwith( LINE32LEN-NORMAL_SYNC_INTERVAL-2-COLORBURST_INTERVAL, (pixline<1)?GRAY_LEVEL:BLACK_LEVEL);
 	//Gray seems to help sync if at top.  TODO: Investigate if white works even better!
 }
@@ -209,8 +249,12 @@ LOCAL void FT_LIN() // Line Signal
 	fillwith( NORMAL_SYNC_INTERVAL, SYNC_LEVEL );
 	fillwith( 1, BLACK_LEVEL );
 	fillwith( COLORBURST_INTERVAL, COLORBURST_LEVEL );
+#ifdef WHITE_BORDER
+	fillwith( 11 - BORDER_LEFT, BLACK_LEVEL );
+	fillwith( BORDER_LEFT, BORDER_LEVEL );
+#else
 	fillwith( 11, BLACK_LEVEL );
-#define HDR_SPD (NORMAL_SYNC_INTERVAL+1+COLORBURST_INTERVAL+11)
+#endif
 
 	int fframe = gframe & 1;
 //#define FILLTEST
@@ -245,7 +289,12 @@ LOCAL void FT_LIN() // Line Signal
 		if( tablept >= tableend ) tablept = tablept - tableend + tablestart;
 	}
 
+#ifdef WHITE_BORDER
+	fillwith( BORDER_RIGHT, BORDER_LEVEL );
+	fillwith( LINE32LEN - (HDR_SPD+FBW2+BORDER_RIGHT), BLACK_LEVEL );
+#else
 	fillwith( LINE32LEN - (HDR_SPD+FBW2), BLACK_LEVEL); //WHITE_LEVEL );
+#endif
 #endif
 
 	pixline++;

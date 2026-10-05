@@ -19,10 +19,11 @@ double NTSC_Frequency = 315.0/88.0;   //3.579545455 MHz
 #define CHANNEL_3  61.25 //Channel 3 works out perfectly.
 #define CHANNEL_4  67.272727273
 #define CHANNEL_5  77.25
+#define CHANNEL_E4 62.5 //European (CCIR B/G) channel E4.  Actually 62.25, but 62.5 repeats every 32 bits.  The closer 62.2727 repeats every 176 and beats visibly (diagonal stripes).
 
 //To find precise frequency divisors... (1408/80)×67.25(nominal frequency) = 1183.6 ... round up.... 1184/(1408/80) = 67.272727273
 
-double MODULATION_Frequency = CHANNEL_3;
+double MODULATION_Frequency = CHANNEL_E4;
 
 
 double BIT_Frequency = 80.0;
@@ -74,16 +75,60 @@ void WriteSignal( double LumaValue, double ChromaValue, double Boundary, double 
 	}
 }
 
-int main()
-{
-	#define TABLESIZE 18
-	int stride = (samples+overshoot)/32;
+#define TABLESIZE 18
 
-	uint32_t databuffer[stride*TABLESIZE];
-	memset( databuffer, 0, sizeof( databuffer ) );
+//How much carrier a signal has (0 = none), measured at the modulation frequency.
+double CarrierLevel( uint32_t * raw_output )
+{
+	double re = 0, im = 0;
 	int i;
-	double t = 0;	//In ns.
+	for( i = 0; i < samples; i++ )
+	{
+		if( raw_output[i/32] & (1<<(31-(i&31))) )
+		{
+			double ph = MODULATION_Frequency * i / BIT_Frequency * PI2;
+			re += cos( ph );
+			im += sin( ph );
+		}
+	}
+	return sqrt( re*re + im*im ) / samples;
+}
+
+//Writes the plain (no chroma) signal whose carrier comes closest to "carrier", on the scale of CarrierLevel.
+//One bit can only hit a handful of levels cleanly.  Nudging the phase a little (eps) about doubles how many there are.
+void WriteGray( double carrier, uint32_t * raw_output )
+{
+	uint32_t trial[(samples+overshoot)/32];
+	double saveeps = eps;
+	double besterr = 1e20, bestboundary = 1.0, besteps = eps;
+	int e, b;
+
+	for( e = 0; e < 9; e++ )
+	for( b = 0; b <= 100; b++ )
+	{
+		eps = saveeps + e * 0.0125;
+		memset( trial, 0, sizeof( trial ) );
+		WriteSignal( 1.0, 0.0, 0.5 + b * 0.005, 0.0, 0, trial, 0xffffffff );
+		double err = fabs( CarrierLevel( trial ) - carrier );
+		if( err < besterr - 1e-9 )
+		{
+			besterr = err;
+			bestboundary = 0.5 + b * 0.005;
+			besteps = eps;
+		}
+	}
+
+	eps = besteps;
+	WriteSignal( 1.0, 0.0, bestboundary, 0.0, 0, raw_output, 0xffffffff );
+	eps = saveeps;
+}
+
+//Writes all TABLESIZE signals into databuffer (which must be zeroed).
+//If mono is set, this leaves out everything NTSC: there is no colorburst, and the colors turn into plain shades of gray.
+void WriteTable( uint32_t * databuffer, int stride, int mono )
+{
 	int debug = 0;
+	int i;
 
 	WriteSignal( 1.0, 0.0, 0.7, 0.0, debug, &databuffer[stride*0], 0xffffffff ); //Black.  //-18.1 db
 	WriteSignal( 1.0, 0.0, 1.0, 0.0, debug, &databuffer[stride*2], 0xffff0000 ); //White
@@ -93,26 +138,46 @@ int main()
 	WriteSignal( 1.0, 0.0, 1.0, 0.0, debug, &databuffer[stride*10], 0xffffffff ); //White
 //BLACK
 	WriteSignal( 1.0, 0.0, 0.85, 0.0, debug, &databuffer[stride*1], 0xffffffff );  //GRAY
+
+	if( mono )
+	{
+		//The remaining colors become a gray ramp, dark to bright.  The carrier fades linearly from black's level down to nothing (white).
+		static const int ramp[] = { 3, 4, 5, 6, 7, 9, 11, 12, 13, 14, 15 };
+		int steps = sizeof( ramp ) / sizeof( ramp[0] );
+		double black = CarrierLevel( &databuffer[stride*0] );
+		for( i = 0; i < steps; i++ )
+		{
+			WriteGray( black * ( steps - i ) / ( steps + 1 ), &databuffer[stride*ramp[i]] );
+		}
+
+		WriteSignal( 1.0, 0.0, 0.7, 0.0, debug, &databuffer[stride*16], 0xffffffff ); //No colorburst, the back porch just stays black.
+	}
+	else
+	{
 //BTW
-	WriteSignal( 0.7, 1.0, 0.9, 0.0, debug, &databuffer[stride*3], 0xffffffff ); 
-	WriteSignal( 0.7, 1.0, 0.9, 0.2, debug, &databuffer[stride*4], 0xffffffff ); 
-	WriteSignal( 0.7, 1.0, 0.9, 0.4, debug, &databuffer[stride*5], 0xffffffff ); 
-	WriteSignal( 0.7, 1.0, 0.9, 0.6, debug, &databuffer[stride*6], 0xffffffff ); 
-	WriteSignal( 0.7, 1.0, 0.9, 0.8, debug, &databuffer[stride*7], 0xffffffff ); 
+		WriteSignal( 0.7, 1.0, 0.9, 0.0, debug, &databuffer[stride*3], 0xffffffff ); 
+		WriteSignal( 0.7, 1.0, 0.9, 0.2, debug, &databuffer[stride*4], 0xffffffff ); 
+		WriteSignal( 0.7, 1.0, 0.9, 0.4, debug, &databuffer[stride*5], 0xffffffff ); 
+		WriteSignal( 0.7, 1.0, 0.9, 0.6, debug, &databuffer[stride*6], 0xffffffff ); 
+		WriteSignal( 0.7, 1.0, 0.9, 0.8, debug, &databuffer[stride*7], 0xffffffff ); 
 //WTB
-	WriteSignal( 0.4, 0.5, 0.65, 0.0, debug, &databuffer[stride*9], 0xffffffff ); 
+		WriteSignal( 0.4, 0.5, 0.65, 0.0, debug, &databuffer[stride*9], 0xffffffff ); 
 //WHITE
-	WriteSignal( 0.5, 0.5, 0.8, 0.0, debug, &databuffer[stride*11], 0xffffffff ); 
-	WriteSignal( 0.5, 0.5, 0.8, 0.2, debug, &databuffer[stride*12], 0xffffffff ); 
-	WriteSignal( 0.5, 0.5, 0.8, 0.4, debug, &databuffer[stride*13], 0xffffffff ); 
-	WriteSignal( 0.5, 0.5, 0.8, 0.6, debug, &databuffer[stride*14], 0xffffffff ); 
-	WriteSignal( 0.5, 0.5, 0.8, 0.8, debug, &databuffer[stride*15], 0xffffffff ); 
+		WriteSignal( 0.5, 0.5, 0.8, 0.0, debug, &databuffer[stride*11], 0xffffffff ); 
+		WriteSignal( 0.5, 0.5, 0.8, 0.2, debug, &databuffer[stride*12], 0xffffffff ); 
+		WriteSignal( 0.5, 0.5, 0.8, 0.4, debug, &databuffer[stride*13], 0xffffffff ); 
+		WriteSignal( 0.5, 0.5, 0.8, 0.6, debug, &databuffer[stride*14], 0xffffffff ); 
+		WriteSignal( 0.5, 0.5, 0.8, 0.8, debug, &databuffer[stride*15], 0xffffffff ); 
 
-	WriteSignal( 1.2, 0.3, 0.6, 0.0, debug, &databuffer[stride*16], 0xffffffff ); //Chroma.
+		WriteSignal( 1.2, 0.3, 0.6, 0.0, debug, &databuffer[stride*16], 0xffffffff ); //Chroma.
+	}
+
 	WriteSignal( 1.0, 0.0, 0.0, 0.0, debug, &databuffer[stride*17], 0xffffffff ); //Sync Tip.  //-16.3 db
+}
 
-	FILE * f = fopen( "broadcast_tables.c", "w" );
-	fprintf( f, "#include \"broadcast_tables.h\"\n\n" );
+void PrintTable( FILE * f, uint32_t * databuffer, int stride )
+{
+	int i;
 	fprintf( f, "uint32_t premodulated_table[%d] = {", stride * TABLESIZE );
 	for( i = 0; i < TABLESIZE*stride; i++ )
 	{
@@ -128,6 +193,29 @@ int main()
 		fprintf( f, "0x%02x, ", (val) );
 	}
 	fprintf( f, "\n};\n" );
+}
+
+int main()
+{
+	int stride = (samples+overshoot)/32;
+
+	uint32_t databuffer[stride*TABLESIZE];
+
+	//Both tables go in the file, the firmware picks one at compile time (OPTS += -DMONOCHROME in user.cfg)
+	FILE * f = fopen( "broadcast_tables.c", "w" );
+	fprintf( f, "#include \"broadcast_tables.h\"\n\n" );
+
+	fprintf( f, "#ifdef MONOCHROME\n\n" );
+	memset( databuffer, 0, sizeof( databuffer ) );
+	WriteTable( databuffer, stride, 1 );
+	PrintTable( f, databuffer, stride );
+
+	fprintf( f, "\n#else\n\n" );
+	memset( databuffer, 0, sizeof( databuffer ) );
+	WriteTable( databuffer, stride, 0 );
+	PrintTable( f, databuffer, stride );
+
+	fprintf( f, "\n#endif\n" );
 	fclose( f );
 
 	f = fopen( "broadcast_tables.h", "w" );
@@ -148,4 +236,3 @@ int main()
 	
 	return 0;
 }
-

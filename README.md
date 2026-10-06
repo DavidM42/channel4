@@ -524,7 +524,7 @@ The steps follow, each on its own screen with `Step 1/3` in the top line. Ingred
 | `script.channel4_recipe_previous` | Goes to the previous screen. It stays on the first one. |
 | `script.channel4_recipe_show` | Shows the current screen again, for example after another message. With `page` it jumps to that screen. |
 
-Put them on a dashboard as buttons, or on a wireless button next to the stove. For a Zigbee remote with an on and an off button that is connected through ZHA, [homeassistant/channel4_mealie_remote.yaml](homeassistant/channel4_mealie_remote.yaml) is a third package that does it: on is next, off is previous. Put the name of your remote into it and copy it to `packages/` like the others.
+Put them on a dashboard as buttons, or on a wireless button next to the stove.
 
 `sensor.channel4_recipe` has the name of the recipe, and `counter.channel4_recipe_page` the number of the screen that is showing. Both are still there after a restart of Home Assistant. When you are done, `rest_command.channel4_demo` or `rest_command.channel4_stop` takes the recipe off the TV.
 
@@ -534,7 +534,7 @@ Good to know:
 - **Amounts are not scaled.** If you set the recipe to twice the amount in Mealie, the TV still shows the amounts as written, with a line at the top that says so.
 - **Mealie does not tell you if the action failed.** It only writes it to its own log, see [Troubleshooting](#troubleshooting).
 - **The webhook only takes requests from your home network.** If Mealie runs somewhere else, see below.
-- **This was tried with Mealie 3.28 and Home Assistant 2026.9**, with a program standing in for the board. The remote was tried with made-up button events, not with a real one. Mealie versions that send the recipe on its own, without the wrapping around it, are handled too, but that was only tried with a made-up recipe.
+- **This was tried with Mealie 3.28 and Home Assistant 2026.9**, with a program standing in for the board. Mealie versions that send the recipe on its own, without the wrapping around it, are handled too, but that was only tried with a made-up recipe.
 
 #### If Mealie is not in your home network
 

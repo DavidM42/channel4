@@ -12,8 +12,10 @@ page.mpfs : mfsmaker page
 pushtodev : pushtodev.c
 	gcc -o $@ $^
 
-execute_reflash : execute_reflash.c md5.c
-	gcc -o $@ $^
+# The firmware updater is a Python script.  "make netburn" expects a program of this name.
+execute_reflash : execute_reflash.py
+	cp $< $@
+	chmod +x $@
 
 push : pushtodev page.mpfs
 	./pushtodev $(IP) 524288 page.mpfs

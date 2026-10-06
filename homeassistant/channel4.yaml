@@ -10,6 +10,7 @@
 #
 # What you get
 #   script.channel4_message      Show a message. Wraps long lines and handles line breaks.
+#   script.channel4_send         Send one command to the board, with up to three tries.
 #   rest_command.channel4_line   Set one line (0 is the top one) and show the text screen.
 #   rest_command.channel4_clear  Empty the text screen and show it.
 #   rest_command.channel4_demo   Go back to the demo.
@@ -56,7 +57,12 @@ script:
           text:
             multiline: true
     sequence:
-      - service: rest_command.channel4_clear
+      - service: script.channel4_send
+        response_variable: sent
+      - if: "{{ sent.status | default(0) != 200 }}"
+        then:
+          - stop: The channel4 board did not answer.
+            error: true
       - repeat:
           # The TV font has no umlauts. Spell them out first so that wrapping counts the right length.
           # Change 14 to 17 if your firmware is built with -DFBH=264.
@@ -67,7 +73,43 @@ script:
             {%- endfor -%}
             {{ (ns.t | wordwrap(36)).split('\n')[:14] }}
           sequence:
-            - service: rest_command.channel4_line
+            - service: script.channel4_send
               data:
                 line: "{{ repeat.index - 1 }}"
                 text: "{{ repeat.item }}"
+
+  channel4_send:
+    alias: "TV: send command"
+    description: >-
+      Sets one line of the channel4 TV, or empties the screen if no line is given.
+      A command can get lost while the TV signal is on, so it is tried up to three times.
+    icon: mdi:television-classic
+    mode: queued
+    fields:
+      line:
+        name: Line
+        description: The line to set, 0 is the top one. Leave it out to empty the whole screen.
+        selector:
+          number:
+            min: 0
+            max: 16
+      text:
+        name: Text
+        description: The text for the line.
+        selector:
+          text:
+    sequence:
+      - repeat:
+          sequence:
+            - variables:
+                reply: {}
+            - service: "rest_command.channel4_{{ 'clear' if line is undefined else 'line' }}"
+              data:
+                line: "{{ line | default(0) }}"
+                text: "{{ text | default('') }}"
+              response_variable: reply
+              continue_on_error: true
+          until: "{{ reply.status | default(0) == 200 or repeat.index >= 3 }}"
+      # The reply goes back to the caller. It is empty if the board did not answer.
+      - stop: Done.
+        response_variable: reply

@@ -77,6 +77,20 @@ Extra copyright info:
 //Sync, colorburst and black before the framebuffer starts on a line.
 #define HDR_SPD (NORMAL_SYNC_INTERVAL+1+COLORBURST_INTERVAL+11)
 
+//How many picture lines (FT_LIN) the line table in CbTable hands out per field, at least.
+#ifdef PAL
+  #define PICTURE_LINES 265
+#else
+  #define PICTURE_LINES 210
+#endif
+
+//A framebuffer with fewer lines than that sits in the middle, with black lines above and below it.
+#if FBH < PICTURE_LINES
+  #define FB_TOP ((PICTURE_LINES-FBH)/2)
+#else
+  #define FB_TOP 0
+#endif
+
 #ifdef WHITE_BORDER
   //Fills the visible area left, right and above the framebuffer with something bright instead of black.  TVs that don't
   //hold their black level (most small black and white ones) show a mostly dark picture as gray, this gives them something
@@ -141,7 +155,7 @@ const uint32_t * tablept = &premodulated_table[0];
 const uint32_t * tableend = &premodulated_table[PREMOD_ENTRIES*PREMOD_SIZE];
 uint32_t * curdma;
 
-uint8_t pixline; //line number currently being written out.
+uint16_t pixline; //line number currently being written out.  PAL has more than 255 of them.
 #ifdef WHITE_BORDER
 uint8_t marginline; //how many of the margin lines above the picture are out already.
 #endif
@@ -249,6 +263,28 @@ LOCAL void FT_LIN() // Line Signal
 	fillwith( NORMAL_SYNC_INTERVAL, SYNC_LEVEL );
 	fillwith( 1, BLACK_LEVEL );
 	fillwith( COLORBURST_INTERVAL, COLORBURST_LEVEL );
+
+#if FBH < PICTURE_LINES
+	//Lines the framebuffer does not reach, above and below it.
+	if( (uint16_t)( pixline - FB_TOP ) >= FBH )
+	{
+#ifdef WHITE_BORDER
+		if( pixline < FB_TOP )
+		{
+			fillwith( 11 - BORDER_LEFT, BLACK_LEVEL );
+			fillwith( BORDER_LEFT + FBW2 + BORDER_RIGHT, BORDER_LEVEL );
+			fillwith( LINE32LEN - (HDR_SPD+FBW2+BORDER_RIGHT), BLACK_LEVEL );
+		}
+		else
+#endif
+		{
+			fillwith( LINE32LEN - (HDR_SPD-11), BLACK_LEVEL );
+		}
+		pixline++;
+		return;
+	}
+#endif
+
 #ifdef WHITE_BORDER
 	fillwith( 11 - BORDER_LEFT, BLACK_LEVEL );
 	fillwith( BORDER_LEFT, BORDER_LEVEL );
@@ -276,7 +312,7 @@ LOCAL void FT_LIN() // Line Signal
 	fillwith( LINE32LEN - (HDR_SPD+FBW/2), BLACK_LEVEL );
 
 #else
-	uint16_t * fbs = (uint16_t*)(&framebuffer[ ( (pixline * (FBW2/2)) + ( ((FBW2/2)*(FBH))*(fframe)) ) / 2 ]);
+	uint16_t * fbs = (uint16_t*)(&framebuffer[ ( ((pixline-FB_TOP) * (FBW2/2)) + ( ((FBW2/2)*(FBH))*(fframe)) ) / 2 ]);
 
 	for( linescratch = 0; linescratch < FBW2/4; linescratch++ )
 	{

@@ -23,9 +23,10 @@
 //Framebuffer width/height
 #define FBW 232 //Must be divisible by 8.  These are actually "double-pixels" used for double-resolution monochrome width.
 #define FBW2 (FBW/2) //Actual width in true pixels.
-#ifdef PAL
-#define FBH 264
-#else
+//The framebuffer is the biggest thing in RAM: 116 bytes per line, because it is double-buffered.
+//220 lines is what NTSC shows.  A PAL picture has room for 264 (OPTS += -DFBH=264 in user.cfg), but those 44 lines
+//cost 5 kB, and then the web page runs out of memory while it loads.  A shorter framebuffer is centered on the screen.
+#ifndef FBH
 #define FBH 220
 #endif
 

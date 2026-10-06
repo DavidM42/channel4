@@ -11,6 +11,8 @@
 #        http://<home assistant>:8123/api/webhook/channel4_recipe
 #   5. Open a recipe in Mealie and run the action. The TV shows the first step.
 #
+# If Mealie is not in the same network as Home Assistant, see the note at local_only below.
+#
 # What you get
 #   script.channel4_recipe_next      Go to the next screen.
 #   script.channel4_recipe_previous  Go to the previous screen.
@@ -30,6 +32,9 @@ automation:
         webhook_id: channel4_recipe
         allowed_methods:
           - POST
+        # Only requests from your home network get through. Home Assistant drops all others without telling the sender.
+        # If Mealie comes in from outside (Tailscale Funnel, Home Assistant Cloud, a reverse proxy), set this to false
+        # and replace the webhook_id above with a long random one. It is then the only password.
         local_only: true
     condition:
       - condition: template

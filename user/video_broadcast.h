@@ -36,9 +36,11 @@ extern int gframe; //Current frame #
 extern uint16_t framebuffer[((FBW2/4)*(FBH))*2]; // /4 = 4 pixels per word (*2 = double buffer)
 extern uint32_t last_internal_frametime;
 extern int8_t jam_color; //Used to test frequency out
+extern uint8_t video_transmitting; //Is the TV signal on the RX pin right now?
 
 
 void ICACHE_FLASH_ATTR testi2s_init();
+void ICACHE_FLASH_ATTR VideoTransmit( int on ); //TV signal on the RX pin on (1) or off (0)
 
 #endif
 

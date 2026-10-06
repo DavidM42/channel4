@@ -47,6 +47,7 @@ Extra copyright info:
 #include <dmastuff.h>
 
 #define FUNC_I2SO_DATA                      1
+#define FUNC_U0RXD                          0  //What the pin is after reset: the UART's receive line.
 
 #define WS_I2S_BCK 1  //Can't be less than 1.
 #define WS_I2S_DIV 2
@@ -124,6 +125,7 @@ Extra copyright info:
 #define LINETYPES 6
 
 int8_t jam_color = -1; 
+uint8_t video_transmitting; //Is the TV signal on the RX pin right now?  Set with VideoTransmit().
 
 //WS_I2S_DIV - if 1 will actually be 2.  Can't be less than 2.
 
@@ -401,6 +403,26 @@ void slc_isr(void * v) {
 	}
 }
 
+//Switches the TV signal on the RX pin on or off.
+//The line generator keeps running either way, so the signal is there at once when it is switched on.  Off means the
+//pin goes back to being the UART's receive line, so it carries no signal: the TV gets nothing, and the board's own
+//WiFi is not disturbed by it.  While it is off, no screens get drawn either (see procTask in user_main.c).
+void ICACHE_FLASH_ATTR VideoTransmit( int on )
+{
+	video_transmitting = on ? 1 : 0;
+
+	if( on )
+	{
+		//A relay for the antenna gets switched on here.
+		PIN_FUNC_SELECT(PERIPHS_IO_MUX_U0RXD_U, FUNC_I2SO_DATA);
+	}
+	else
+	{
+		PIN_FUNC_SELECT(PERIPHS_IO_MUX_U0RXD_U, FUNC_U0RXD);
+		//A relay for the antenna gets switched off here.
+	}
+}
+
 //Initialize I2S subsystem for DMA circular buffer use
 void ICACHE_FLASH_ATTR testi2s_init() {
 	int x = 0, y;
@@ -474,7 +496,12 @@ void ICACHE_FLASH_ATTR testi2s_init() {
 //----
 
 	//Init pins to i2s functions
-	PIN_FUNC_SELECT(PERIPHS_IO_MUX_U0RXD_U, FUNC_I2SO_DATA);
+#ifdef START_SILENT
+	//No signal until a command asks for something to be shown (see custom_commands.c)
+	VideoTransmit( 0 );
+#else
+	VideoTransmit( 1 );
+#endif
 //	PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO2_U, FUNC_I2SO_WS);
 //	PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTDO_U, FUNC_I2SO_BCK);
 

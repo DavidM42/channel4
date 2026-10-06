@@ -323,6 +323,9 @@ static void ICACHE_FLASH_ATTR procTask(os_event_t *events)
 
 	CSTick( 0 );
 
+	//With the TV signal off nobody can see a screen, so none is drawn and the demo stands still.
+	if( !video_transmitting ) lastframe = tbuffer;
+
 	if( lastframe != tbuffer )
 	{
 		//printf( "FT: %d - ", last_internal_frametime );

@@ -36,6 +36,7 @@ int ICACHE_FLASH_ATTR CustomCommand(char * buffer, int retsize, char *pusrdata, 
 		showallowadvance = (rh << 4) | fromhex1( *(bp++) );
 		rh = fromhex1( *(bp++) );
 		jam_color = (rh << 4) | fromhex1( *(bp++) );
+		VideoTransmit( 1 );
 		break;
 	}
 
@@ -70,7 +71,8 @@ int ICACHE_FLASH_ATTR CustomCommand(char * buffer, int retsize, char *pusrdata, 
 		{
 			premodulated_table[i*PREMOD_SIZE + ch] = premodulated_table[(i-PREMOD_ENTRIES)*PREMOD_SIZE + ch];
 		}
-		
+
+		VideoTransmit( 1 );
 		break;
 	}
 
@@ -91,6 +93,7 @@ int ICACHE_FLASH_ATTR CustomCommand(char * buffer, int retsize, char *pusrdata, 
 		}
 
 		showstate = TVTEXT_SHOWSTATE;
+		VideoTransmit( 1 );
 		buffend += ets_sprintf( buffend, "CT" );
 		return buffend-buffer;
 	}
@@ -99,6 +102,7 @@ int ICACHE_FLASH_ATTR CustomCommand(char * buffer, int retsize, char *pusrdata, 
 	{
 		TVTextClear();
 		showstate = TVTEXT_SHOWSTATE;
+		VideoTransmit( 1 );
 		buffend += ets_sprintf( buffend, "CX" );
 		return buffend-buffer;
 	}
@@ -134,7 +138,15 @@ int ICACHE_FLASH_ATTR CustomCommand(char * buffer, int retsize, char *pusrdata, 
 		showallowadvance = 1;
 		framessostate = 0;
 		showtemp = 0;
+		VideoTransmit( 1 );
 		buffend += ets_sprintf( buffend, "CD" );
+		return buffend-buffer;
+	}
+
+	case 's': case 'S': //cs   Stops the TV signal.  Any command that shows something starts it again: CT, CX, CD, CO, CV.
+	{
+		VideoTransmit( 0 );
+		buffend += ets_sprintf( buffend, "CS" );
 		return buffend-buffer;
 	}
 	}

@@ -22,6 +22,8 @@ Solder a wire to the RX pin, flash the board, tune an old TV to channel E4 and w
 - **Optional bright border** for TVs that show dark screens as gray.
 - **Text from Home Assistant.** A text screen that you fill over WiFi, with a ready-made Home Assistant package.
 - **It stays on your WiFi.** channel3 switches back to its own access point at every start. This fork does not.
+- **A silent start.** With `START_SILENT` the TV signal only starts when something asks for a screen, and a command stops it again, see [Signal only when needed](#signal-only-when-needed).
+- **Updates over WiFi that check their work.** New firmware goes on over the network, is verified and only then takes over, see [Updating over WiFi](#updating-over-wifi).
 - **A filter for the antenna pin.** The TV signal jams the board's own WiFi. Two small parts at the pin fix most of that, see [WiFi and the TV signal](#wifi-and-the-tv-signal).
 - **PAL and black and white are switched on by default** in `user.cfg`.
 - **Setup, build and flash instructions** for macOS and Linux, below.
@@ -189,7 +191,33 @@ Three things worth knowing:
 2. Switch the TV to VHF band I (VHF-L, VL) and tune to channel E4, 62.5 MHz. On a set with a tuning wheel, turn slowly through the lower part of the band until the picture appears.
 3. Set brightness so the background of a text screen is just black, then contrast so the text is crisp.
 
+If `START_SILENT` is switched on in `user.cfg`, there is no picture until something asks for one. Join the board's WiFi network (see below) and open http://192.168.4.1/d/issue?CD to start the demo, or use the "Set Current" button on the web page.
+
 The board also opens a WiFi network called `ESP_` followed by six characters. Join it and open http://192.168.4.1 for the web interface. Its "NTSC" button lets you freeze the demo on one screen, which makes adjusting the TV much easier.
+
+### Updating over WiFi
+
+Once a board runs this firmware and is on your network, new firmware can go on without USB:
+
+```sh
+python3 web/execute_reflash.py 192.168.1.50
+```
+
+That sends the two image files from the current folder. `make netburn IP=192.168.1.50`, with the same `ESP_ROOT=...` settings as in step 4, builds first and then does the same.
+
+What happens:
+
+1. It checks that the new firmware can go on this way, and whether the board already runs it.
+2. It stops the TV signal, which disturbs the board's WiFi.
+3. It puts both images into a spare part of the flash, reads them back and compares.
+4. It tells the board to copy them over its firmware. The board checks them once more before it does.
+5. It waits for the board to restart and reads its flash back.
+
+Nothing on the board changes before step 4, and `--dry-run` stops before it.
+
+**Step 4 takes about ten seconds. If the power fails in that time, the board does not start any more** and has to be flashed over USB.
+
+The web page and the settings, the WiFi network among them, stay as they are.
 
 ## Options
 
@@ -202,6 +230,7 @@ All of these are lines in `user.cfg`. A `#` in front switches a line off.
 | `OPTS += -DFBH=264` | Full height PAL picture, 264 lines instead of 220. The web page then runs out of memory, see [Picture size and memory](#picture-size-and-memory). |
 | `OPTS += -DWHITE_BORDER` | Paints the visible area left, right and above the picture bright instead of black. |
 | `OPTS += -DBORDER_LEVEL=13` | How bright that border is. Only used together with `WHITE_BORDER`. |
+| `OPTS += -DSTART_SILENT` | No TV signal after power-up. It starts with the first text or demo command, see [Signal only when needed](#signal-only-when-needed). |
 
 After changing any of them: `make clean`, `make all`, flash.
 
@@ -243,6 +272,24 @@ The picture is 220 lines high by default, also for PAL. It sits in the middle of
 Single small requests, like the text commands from Home Assistant, worked with both: 30 of 30.
 
 To see how much memory is free on your board, open `http://<board>/d/issue?I`. It is the last number.
+
+### Signal only when needed
+
+With `START_SILENT` the RX pin stays silent after power-up. The TV gets nothing, and the board's WiFi is not disturbed by the TV signal.
+
+The signal starts when something asks for a screen, and stops on request:
+
+| What | TV signal |
+|---|---|
+| `CT`, `CX` (text screen) and `CD` (demo) | on |
+| The web page: its "Set Current" button for the screen, and "Upload As" for a color (`CO`, `CV`) | on |
+| `CS` | off |
+
+Send the commands as `http://<board>/d/issue?CS` and so on, see [The commands behind it](#the-commands-behind-it).
+
+While the signal is off, no screens are drawn and the demo stands still. It carries on where it stopped, or from its first screen after `CD`. The part that makes the TV lines keeps running, so the picture is there at once when the signal comes on.
+
+Without `START_SILENT` the signal is on from the start, as in channel3. `CS` and the commands that start the signal again work either way.
 
 ## Antenna
 
@@ -382,7 +429,7 @@ The TV switches to the text screen and shows `Hello World` on the top line. The 
 
 ### 3. Add the package to Home Assistant
 
-1. Open [homeassistant/channel4.yaml](homeassistant/channel4.yaml) and replace `192.168.1.50` with the address of your board. It appears three times.
+1. Open [homeassistant/channel4.yaml](homeassistant/channel4.yaml) and replace `192.168.1.50` with the address of your board. It appears four times.
 2. Copy the file to `packages/channel4.yaml` in your Home Assistant configuration folder.
 3. Make sure `configuration.yaml` loads packages:
 
@@ -407,6 +454,7 @@ The package gives you one script and three commands.
 | `rest_command.channel4_line` | Sets one line and switches to the text screen. Line 0 is the top one. |
 | `rest_command.channel4_clear` | Empties the text screen and switches to it. |
 | `rest_command.channel4_demo` | Goes back to the demo. |
+| `rest_command.channel4_stop` | Stops the TV signal. Any of the three above starts it again. |
 
 For example, as the action of an automation:
 
@@ -436,6 +484,7 @@ These are ordinary channel3 custom commands, so anything that can open a web add
 | `CT` + two digits + text, like `CT03Hello` | Puts the text on that line and shows the text screen. No text empties the line. | `CT`, or `!CT` if there is no such line |
 | `CX` | Empties all lines and shows the text screen. | `CX` |
 | `CD` | Goes back to the demo, starting with its first screen. | `CD` |
+| `CS` | Stops the TV signal. `CT`, `CX`, `CD` and the web page start it again. | `CS` |
 | `CW` | Stores the WiFi network the board is on, if it is not stored yet. | `CW`, then four numbers: mode now, mode stored (1 is on a network, 2 is its own access point), 1 if the stored network is the one in use, free memory |
 
 The same commands also work as UDP packets to port 7878, without the address length limit below.
@@ -461,6 +510,7 @@ The same commands also work as UDP packets to port 7878, without the address len
 | No serial port appears when you plug the board in, on Linux | Try another USB cable, many only charge. On Ubuntu, the `brltty` package is known to grab these USB serial chips, remove it if you do not need it. |
 | `Permission denied` on the port on Linux | Add yourself to the `dialout` group (step 1) and log in again. |
 | `No serial data received` | The antenna is holding the RX pin down. Unplug its far end while flashing. See [Antenna](#antenna). |
+| `No serial data received` with nothing connected to RX | The serial input of the board may be damaged. A board that still runs this firmware and is on your network can be updated without it, see [Updating over WiFi](#updating-over-wifi). |
 | Flashing worked, but there is no picture and no WiFi network | Flash again with the long first-time command, including `-fs 4MB`. |
 | The web page does not load | `web/page.mpfs` is not on the board. Flash with the long first-time command. |
 | The web page loads slowly, or only shows "Introduction" and "NTSC" | The TV signal disturbs the board's WiFi. Fit [the filter at the pin](#the-filter-at-the-pin). With it the page can still need a second try. |

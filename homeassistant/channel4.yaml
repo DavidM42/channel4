@@ -1,0 +1,68 @@
+# Home Assistant package for channel4: show text from Home Assistant on the TV.
+#
+# Setup
+#   1. Put the board on your home WiFi and give it a fixed IP address (see the README).
+#   2. Replace 192.168.1.50 below with that address. It appears three times.
+#   3. Copy this file to <config>/packages/channel4.yaml and make sure configuration.yaml has
+#        homeassistant:
+#          packages: !include_dir_named packages
+#   4. Restart Home Assistant.
+#
+# What you get
+#   script.channel4_message      Show a message. Wraps long lines and handles line breaks.
+#   rest_command.channel4_line   Set one line (0 is the top one) and show the text screen.
+#   rest_command.channel4_clear  Empty the text screen and show it.
+#   rest_command.channel4_demo   Go back to the demo.
+#
+# The screen holds 14 lines of 36 characters (17 if the firmware is built with -DFBH=264).
+# The board forgets the text when it loses power.
+
+rest_command:
+  channel4_line:
+    # The firmware only reads the first 78 characters of an address, so the text is cut to fit.
+    # Spaces go out as "+", which the firmware understands, because "%20" would use up three characters.
+    # The regex removes half an encoded character if the cut went through one.
+    url: >-
+      http://192.168.1.50/d/issue?CT{{ '%02d' | format(line | int) }}{{
+      ((text | string)[:36] | urlencode | replace('%20', '+'))[:65] | regex_replace('(%[C-F][0-9A-F])?(%[0-9A-F]?)?$', '') }}
+    timeout: 5
+
+  channel4_clear:
+    url: "http://192.168.1.50/d/issue?CX"
+    timeout: 5
+
+  channel4_demo:
+    url: "http://192.168.1.50/d/issue?CD"
+    timeout: 5
+
+script:
+  channel4_message:
+    alias: "TV: show message"
+    description: Shows a message on the channel4 TV. Long lines are wrapped at 36 characters.
+    icon: mdi:television-classic
+    mode: queued
+    fields:
+      message:
+        name: Message
+        description: The text to show. Use line breaks for several lines.
+        required: true
+        example: "Washing machine\nis done"
+        selector:
+          text:
+            multiline: true
+    sequence:
+      - service: rest_command.channel4_clear
+      - repeat:
+          # The TV font has no umlauts. Spell them out first so that wrapping counts the right length.
+          # Change 14 to 17 if your firmware is built with -DFBH=264.
+          for_each: >-
+            {%- set ns = namespace(t = message | string) -%}
+            {%- for from, to in [('ä','ae'), ('ö','oe'), ('ü','ue'), ('Ä','Ae'), ('Ö','Oe'), ('Ü','Ue'), ('ß','ss')] -%}
+              {%- set ns.t = ns.t | replace(from, to) -%}
+            {%- endfor -%}
+            {{ (ns.t | wordwrap(36)).split('\n')[:14] }}
+          sequence:
+            - service: rest_command.channel4_line
+              data:
+                line: "{{ repeat.index - 1 }}"
+                text: "{{ repeat.item }}"

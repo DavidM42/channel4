@@ -12,6 +12,12 @@
 #include "commonservices.h"
 #include <mdns.h>
 #include "3d.h"
+#include "tvtext.h"
+
+//The text screen starts at 8,20.  Keep it inside the framebuffer, the plot functions don't check.
+#if ( 8 + 6*TVTEXT_COLS > FBW ) || ( 20 + 14*(TVTEXT_LINES-1) + 16 > FBH )
+#error Text screen does not fit the framebuffer.
+#endif
 
 #define PORT 7777
 
@@ -79,6 +85,16 @@ void ICACHE_FLASH_ATTR DrawFrame(  )
 
 	switch( showstate )
 	{
+	case TVTEXT_SHOWSTATE:  // Not in the normal set either.  Text from outside, stays until something switches screens.
+	{
+		CNFGPenX = 8;
+		for( i = 0; i < TVTEXT_LINES; i++ )
+		{
+			CNFGDrawText( tvtext[i], 2 );
+			CNFGPenY += 14;
+		}
+		break;
+	}
 	case 11:  // State that's not in the normal set.  Just displays boxes.
 	{
 		for( i = 0; i < 16; i++ )
@@ -395,7 +411,8 @@ void ICACHE_FLASH_ATTR user_init(void)
 		wifi_set_opmode(1);
 	}
 #else
-		wifi_set_opmode(2);
+	//channel3 switched to its own access point here, at every start.  That is left out, so a board that was put on a
+	//WiFi network goes back to it after a restart.  If it cannot connect, it opens its access point by itself.
 #endif
 
 

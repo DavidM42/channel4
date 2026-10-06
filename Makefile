@@ -14,6 +14,7 @@ endif
 SRCS+= \
 	user/video_broadcast.c \
 	user/3d.c \
+	user/tvtext.c \
 	tablemaker/broadcast_tables.c \
 	tablemaker/CbTable.c
 

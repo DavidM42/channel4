@@ -9,7 +9,7 @@
 #      send anything to addresses in your home network.
 #   4. In Mealie, add a recipe action of the type POST with this address (the README says where):
 #        http://<home assistant>:8123/api/webhook/channel4_recipe
-#   5. Open a recipe in Mealie and run the action. The TV shows the first step.
+#   5. Open a recipe in Mealie and run the action. The TV shows the ingredients.
 #
 # If Mealie is not in the same network as Home Assistant, see the note at local_only below.
 #
@@ -20,12 +20,13 @@
 #   sensor.channel4_recipe           The name of the recipe. Its screens are in the attribute "pages".
 #   counter.channel4_recipe_page     The number of the screen that is showing, starting at 1.
 #
-# Every step gets its own screen. A step that does not fit on one screen continues on the next.
+# The ingredients come first, then every step gets its own screen.
+# What does not fit on one screen continues on the next.
 
 automation:
   - id: channel4_recipe_from_mealie
     alias: "TV: recipe from Mealie"
-    description: Takes a recipe that Mealie sends and shows its first step on the channel4 TV.
+    description: Takes a recipe that Mealie sends and shows its first screen on the channel4 TV.
     mode: queued
     trigger:
       - platform: webhook
@@ -42,18 +43,20 @@ automation:
     variables:
       # Mealie sends the recipe inside "content". Older versions send the recipe itself, with names like recipeInstructions.
       # The TV font only has plain ASCII, so everything else is spelled out or replaced before the lines are wrapped.
-      # A screen is 14 lines: the name and step number, an empty line and 12 lines of the step.
-      # Change 12 to 15 if your firmware is built with -DFBH=264.
+      # A screen is 14 lines: the name and what the screen is, an empty line and 12 lines of text.
+      # Change 12 to 15 if your firmware is built with -DFBH=264. It appears twice.
       recipe: >-
         {%- macro plain(text) -%}
           {%- set ns = namespace(t = text | default('', true) | string) -%}
           {%- for from, to in [
-            ('\r', ''), ('[\t   ]', ' '), ('\\*\\*|__', ''),
+            ('\r', ''), ('[\t\u00a0\u2009\u202f]', ' '), ('\\*\\*|__', ''),
             ('ä', 'ae'), ('ö', 'oe'), ('ü', 'ue'), ('Ä', 'Ae'), ('Ö', 'Oe'), ('Ü', 'Ue'), ('ß', 'ss'),
             ('[àáâãå]', 'a'), ('[èéêë]', 'e'), ('[ìíîï]', 'i'), ('[òóôõø]', 'o'), ('[ùúû]', 'u'),
             ('ç', 'c'), ('ñ', 'n'), ('É', 'E'),
             ('(?<=[0-9])(?=[½¼¾⅓⅔⅛])', ' '),
             ('½', '1/2'), ('¼', '1/4'), ('¾', '3/4'), ('⅓', '1/3'), ('⅔', '2/3'), ('⅛', '1/8'),
+            ('[⁰₀]', '0'), ('[¹₁]', '1'), ('[²₂]', '2'), ('[³₃]', '3'), ('[⁴₄]', '4'), ('[⁵₅]', '5'),
+            ('[⁶₆]', '6'), ('[⁷₇]', '7'), ('[⁸₈]', '8'), ('[⁹₉]', '9'), ('⁄', '/'),
             (' ?°(?=[CF])', ' '), ('°', ' deg'),
             ('[–—]', '-'), ('[“”„]', '"'), ('[‘’‚]', "'"), ('…', '...'), ('×', 'x'),
             ('[^ -~\n]', '?'), ('\n{3,}', '\n\n')
@@ -67,19 +70,38 @@ automation:
         {%- set name = plain(source.name) or 'Recipe' -%}
         {%- set steps = source.recipe_instructions | default(source.recipeInstructions | default([], true), true)
           | selectattr('text') | list -%}
-        {%- set ns = namespace(pages = []) -%}
+        {%- set ns = namespace(pages = [], lines = []) -%}
+        {%- macro screen(tag, lines, part, parts) -%}
+          {%- set tag = tag ~ (' (%d/%d)' | format(part, parts) if parts > 1 else '') -%}
+          {%- set width = 35 - tag | length -%}
+          {{- '%-*s %s' | format(width, name[:width], tag) ~ '\n\n' ~ lines | join('\n') -}}
+        {%- endmacro -%}
+        {%- set scale = data.recipe_scale | default(1, true) | float(1) -%}
+        {%- if scale != 1 -%}
+          {%- set ns.lines = ['Amounts are for the recipe as', 'written, not times %g.' | format(scale), ''] -%}
+        {%- endif -%}
+        {%- for item in source.recipe_ingredient | default(source.recipeIngredient | default([], true), true) -%}
+          {%- set title = plain(item.title) -%}
+          {%- set text = plain(item.display | default('', true) or item.note) | replace('\n', ' ') -%}
+          {%- if title -%}
+            {%- set ns.lines = ns.lines + ([''] if ns.lines and ns.lines[-1] else []) + ((title ~ ':') | wordwrap(36)).split('\n') -%}
+          {%- endif -%}
+          {%- for line in (text | wordwrap(34)).split('\n') if text -%}
+            {%- set ns.lines = ns.lines + [('- ' if loop.first else '  ') ~ line] -%}
+          {%- endfor -%}
+        {%- endfor -%}
+        {%- for lines in ns.lines | batch(12) -%}
+          {%- set ns.pages = ns.pages + [screen('Ingredients', lines, loop.index, loop.length)] -%}
+        {%- endfor -%}
         {%- for step in steps -%}
           {%- set number = loop.index -%}
           {%- set title = plain(step.title) -%}
           {%- set text = (title ~ ':\n' if title else '') ~ plain(step.text) -%}
           {%- for lines in (text | wordwrap(36)).split('\n') | batch(12) -%}
-            {%- set tag = 'Step %d/%d' | format(number, steps | length)
-              ~ (' (%d/%d)' | format(loop.index, loop.length) if loop.length > 1 else '') -%}
-            {%- set width = 35 - tag | length -%}
-            {%- set ns.pages = ns.pages + ['%-*s %s' | format(width, name[:width], tag) ~ '\n\n' ~ lines | join('\n')] -%}
+            {%- set ns.pages = ns.pages + [screen('Step %d/%d' | format(number, steps | length), lines, loop.index, loop.length)] -%}
           {%- endfor -%}
         {%- endfor -%}
-        {{ {'name': name, 'pages': ns.pages or [name ~ '\n\nThis recipe has no steps.']} }}
+        {{ {'name': name, 'pages': ns.pages or [name ~ '\n\nThis recipe is empty.']} }}
     action:
       # The sensor below keeps the screens for the next and previous scripts.
       - event: channel4_recipe

@@ -31,6 +31,8 @@ automation:
     trigger:
       - platform: webhook
         webhook_id: channel4_recipe
+        # comment out if homeassisant is accessed from outside network
+        # local_only: false
         allowed_methods:
           - POST
         # Only requests from your home network get through. Home Assistant drops all others without telling the sender.

@@ -31,13 +31,12 @@ automation:
     trigger:
       - platform: webhook
         webhook_id: channel4_recipe
-        # comment out if homeassisant is accessed from outside network
-        # local_only: false
         allowed_methods:
           - POST
         # Only requests from your home network get through. Home Assistant drops all others without telling the sender.
-        # If Mealie comes in from outside (Tailscale Funnel, Home Assistant Cloud, a reverse proxy), set this to false
-        # and replace the webhook_id above with a long random one. It is then the only password.
+        # If Mealie comes in from outside (Tailscale Funnel, Home Assistant Cloud, a reverse proxy), change the true
+        # in the line below to false and replace the webhook_id above with a long random one. It is then the only
+        # password. Do not add a second local_only line instead: Home Assistant only uses the last one.
         local_only: true
     condition:
       - condition: template

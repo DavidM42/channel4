@@ -21,7 +21,7 @@ Solder a wire to the RX pin, flash the board, tune an old TV to channel E4 and w
 - **Black and white mode.** `MONOCHROME` leaves out all NTSC color information. The colors become clean shades of gray instead of hatching.
 - **Optional bright border** for TVs that show dark screens as gray.
 - **Text from Home Assistant.** A text screen that you fill over WiFi, with a ready-made Home Assistant package.
-- **Recipes from Mealie.** A second package shows the steps of a [Mealie](https://mealie.io) recipe, one step per screen, see [Recipes from Mealie](#recipes-from-mealie).
+- **Recipes from Mealie.** A second package shows the ingredients and the steps of a [Mealie](https://mealie.io) recipe, one step per screen, see [Recipes from Mealie](#recipes-from-mealie).
 - **It stays on your WiFi.** channel3 switches back to its own access point at every start. This fork does not.
 - **A silent start.** With `START_SILENT` the TV signal only starts when something asks for a screen, and a command stops it again, see [Signal only when needed](#signal-only-when-needed).
 - **Updates over WiFi that check their work.** New firmware goes on over the network, is verified and only then takes over, see [Updating over WiFi](#updating-over-wifi).
@@ -479,7 +479,7 @@ Or one line that changes while the rest stays:
 
 ### Recipes from Mealie
 
-A second package shows the steps of a [Mealie](https://mealie.io) recipe on the TV. You start it from the recipe in Mealie and page through the steps from Home Assistant. It needs the package from step 3.
+A second package shows a [Mealie](https://mealie.io) recipe on the TV, first the ingredients and then the steps. You start it from the recipe in Mealie and page through it from Home Assistant. It needs the package from step 3.
 
 1. Copy [homeassistant/channel4_mealie.yaml](homeassistant/channel4_mealie.yaml) to `packages/channel4_mealie.yaml`, next to `channel4.yaml`, and restart Home Assistant.
 2. Allow Mealie to reach Home Assistant. Mealie does not send anything to addresses inside your home network unless you list them. Give the Mealie container this setting, with the address of Home Assistant, and start it again:
@@ -499,18 +499,24 @@ A second package shows the steps of a [Mealie](https://mealie.io) recipe on the 
 
 4. Open a recipe, and pick **Show on TV** from the recipe actions in its menu.
 
-The TV shows the first step:
+The TV shows the ingredients:
 
 ```
-Kaesespaetzle               Step 1/3
+Kaesespaetzle            Ingredients
 
 Teig:
-400 g Mehl, 4 Eier, 1 1/2 TL Salz
-und 1/4 l Wasser zu einem zaehen
-Teig schlagen, bis er Blasen wirft.
+- 400 g Mehl Type 405
+- 4 Eier
+- 1 1/2 TL Salz
+- 1/4 l Wasser lauwarm
+
+Zum Ueberbacken:
+- 250 g Bergkaese frisch gerieben,
+  am besten eine Mischung aus
+  Emmentaler und wuerzigem Bergkaese
 ```
 
-Every step gets its own screen. A step that is longer than 12 lines continues on the next screen, and the top line then reads `Step 2/3 (1/2)`. These scripts move through the screens:
+The steps follow, each on its own screen with `Step 1/3` in the top line. Ingredients or a step that are longer than 12 lines continue on the next screen, and the top line then reads `Ingredients (1/2)` or `Step 2/3 (1/2)`. These scripts move through the screens:
 
 | Name | What it does |
 |---|---|
@@ -518,17 +524,17 @@ Every step gets its own screen. A step that is longer than 12 lines continues on
 | `script.channel4_recipe_previous` | Goes to the previous screen. It stays on the first one. |
 | `script.channel4_recipe_show` | Shows the current screen again, for example after another message. With `page` it jumps to that screen. |
 
-Put them on a dashboard as buttons, or on a wireless button next to the stove.
+Put them on a dashboard as buttons, or on a wireless button next to the stove. For a Zigbee remote with an on and an off button that is connected through ZHA, [homeassistant/channel4_mealie_remote.yaml](homeassistant/channel4_mealie_remote.yaml) is a third package that does it: on is next, off is previous. Put the name of your remote into it and copy it to `packages/` like the others.
 
 `sensor.channel4_recipe` has the name of the recipe, and `counter.channel4_recipe_page` the number of the screen that is showing. Both are still there after a restart of Home Assistant. When you are done, `rest_command.channel4_demo` or `rest_command.channel4_stop` takes the recipe off the TV.
 
 Good to know:
 
 - **Special characters are spelled out.** `½` becomes `1/2`, `180 °C` becomes `180 C`, accents are dropped, and Markdown bold loses its stars. What is left over becomes `?`.
-- **Only the steps are shown**, not the ingredients.
+- **Amounts are not scaled.** If you set the recipe to twice the amount in Mealie, the TV still shows the amounts as written, with a line at the top that says so.
 - **Mealie does not tell you if the action failed.** It only writes it to its own log, see [Troubleshooting](#troubleshooting).
 - **The webhook only takes requests from your home network.** If Mealie runs somewhere else, see below.
-- **This was tried with Mealie 3.28 and Home Assistant 2026.9**, with a program standing in for the board. Mealie versions that send the recipe on its own, without the wrapping around it, are handled too, but that was only tried with a made-up recipe.
+- **This was tried with Mealie 3.28 and Home Assistant 2026.9**, with a program standing in for the board. The remote was tried with made-up button events, not with a real one. Mealie versions that send the recipe on its own, without the wrapping around it, are handled too, but that was only tried with a made-up recipe.
 
 #### If Mealie is not in your home network
 

@@ -1,0 +1,33 @@
+# Home Assistant package for channel4: page through the Mealie recipe with a Zigbee remote.
+#
+# This is for a remote with an on and an off button that is connected through ZHA, like the IKEA ones.
+# On goes to the next screen, off to the previous one. It needs channel4_mealie.yaml from the same folder.
+#
+# Setup
+#   1. Replace ikea_two_way_dimmer_switch below with the name of your remote, the way Home Assistant shows it
+#      under Settings, Devices. Write it in lower case with _ for everything that is not a letter or a digit.
+#   2. Copy this file to <config>/packages/channel4_mealie_remote.yaml and restart Home Assistant.
+
+automation:
+  - id: channel4_recipe_remote
+    alias: "TV: recipe remote"
+    description: Pages through the recipe on the channel4 TV with the on and off buttons of a Zigbee remote.
+    mode: queued
+    trigger:
+      - platform: event
+        event_type: zha_event
+        event_data:
+          command: "on"
+        id: next
+      - platform: event
+        event_type: zha_event
+        event_data:
+          command: "off"
+        id: previous
+    condition:
+      - condition: template
+        value_template: >-
+          {%- set device = trigger.event.data.device_id -%}
+          {{ (device_attr(device, 'name_by_user') or device_attr(device, 'name')) | slugify == 'ikea_two_way_dimmer_switch' }}
+    action:
+      - service: "script.channel4_recipe_{{ trigger.id }}"

@@ -73,10 +73,9 @@ script:
             {%- endfor -%}
             {{ (ns.t | wordwrap(36)).split('\n')[:14] }}
           sequence:
+            # The data goes out in one piece, or Home Assistant strips the spaces at the start of a line.
             - service: script.channel4_send
-              data:
-                line: "{{ repeat.index - 1 }}"
-                text: "{{ repeat.item }}"
+              data: "{{ {'line': repeat.index - 1, 'text': repeat.item} }}"
 
   channel4_send:
     alias: "TV: send command"
@@ -104,9 +103,7 @@ script:
             - variables:
                 reply: {}
             - service: "rest_command.channel4_{{ 'clear' if line is undefined else 'line' }}"
-              data:
-                line: "{{ line | default(0) }}"
-                text: "{{ text | default('') }}"
+              data: "{{ {'line': line | default(0), 'text': text | default('')} }}"
               response_variable: reply
               continue_on_error: true
           until: "{{ reply.status | default(0) == 200 or repeat.index >= 3 }}"

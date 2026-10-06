@@ -527,8 +527,21 @@ Good to know:
 - **Special characters are spelled out.** `½` becomes `1/2`, `180 °C` becomes `180 C`, accents are dropped, and Markdown bold loses its stars. What is left over becomes `?`.
 - **Only the steps are shown**, not the ingredients.
 - **Mealie does not tell you if the action failed.** It only writes it to its own log, see [Troubleshooting](#troubleshooting).
-- **Use the address of Home Assistant in your home network.** The webhook does not take requests that come from the internet.
+- **The webhook only takes requests from your home network.** If Mealie runs somewhere else, see below.
 - **This was tried with Mealie 3.28 and Home Assistant 2026.9**, with a program standing in for the board. Mealie versions that send the recipe on its own, without the wrapping around it, are handled too, but that was only tried with a made-up recipe.
+
+#### If Mealie is not in your home network
+
+When Mealie reaches Home Assistant from outside, for example through a Tailscale Funnel, Home Assistant Cloud or a reverse proxy, Home Assistant sees a request from the internet. It answers `200` and drops it. Mealie has no error to log, and nothing happens. The Home Assistant log shows `Received remote request for local webhook channel4_recipe`.
+
+Change two lines of the trigger in `channel4_mealie.yaml` and reload the automations:
+
+```yaml
+        webhook_id: 3f9c1b7e52a44d0c9a6e8b1d2c7f4a10   # your own, from: openssl rand -hex 16
+        local_only: false
+```
+
+Use the new ID in the URL of the recipe action too. The address is now open to the internet and the ID is its only password, so do not keep `channel4_recipe` or the example above. `HTTP_ALLOW_LIST` is not needed for a public address.
 
 ### The commands behind it
 
@@ -575,7 +588,7 @@ The same commands also work as UDP packets to port 7878, without the address len
 | The three `rest_command`s are there but `script.channel4_message` is missing | The file was pasted into `configuration.yaml`, which already has a `script:` line. Use it as a package, see [step 3](#3-add-the-package-to-home-assistant). In the list of scripts it is called "TV: show message". |
 | Home Assistant warns `Setup of package 'channel4' failed: integration 'rest_command' has duplicate key 'url'` | The three commands are defined twice, in the package and somewhere else, usually a copy pasted into `configuration.yaml`. Remove that copy and restart. |
 | Home Assistant cannot reach the board | Open `http://<board>/d/issue?CC` in a browser. If that does not show `CC`, the address is wrong or the board is not on your WiFi. Its address is on the first demo screen. |
-| The recipe action in Mealie does nothing | Look at the log of Mealie. `invalid request on local resource` means Mealie is not allowed to reach Home Assistant, set `HTTP_ALLOW_LIST` as in [Recipes from Mealie](#recipes-from-mealie). If the log is clean, check the address of the action. If your `configuration.yaml` has no `default_config:` line, add a line `webhook:`. |
+| The recipe action in Mealie does nothing | Look at the log of Mealie. `invalid request on local resource` means Mealie is not allowed to reach Home Assistant, set `HTTP_ALLOW_LIST` as in [Recipes from Mealie](#recipes-from-mealie). If the log is clean and Mealie reaches Home Assistant from outside your home network, the webhook has to be opened, see [If Mealie is not in your home network](#if-mealie-is-not-in-your-home-network). Otherwise check the address of the action. If your `configuration.yaml` has no `default_config:` line, add a line `webhook:`. |
 | Text from Home Assistant ends in `?` or odd characters | The line was too long for the firmware's 78 character address limit. Use `script.channel4_message`, which keeps lines short enough. |
 | Coarse diagonal stripes | The carrier frequency has a long bit pattern. See [Why 62.5 MHz](#why-625-mhz). |
 | Text on a gray background instead of black | Turn the brightness of the TV down and the contrast up. If that is not enough, try `WHITE_BORDER`. |

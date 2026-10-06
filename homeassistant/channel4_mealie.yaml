@@ -1,0 +1,158 @@
+# Home Assistant package for channel4: show the steps of a Mealie recipe on the TV.
+#
+# This needs channel4.yaml from the same folder, which does the talking to the board.
+#
+# Setup
+#   1. Copy this file to <config>/packages/channel4_mealie.yaml, next to channel4.yaml.
+#   2. Restart Home Assistant.
+#   3. Start Mealie with HTTP_ALLOW_LIST set to the address of Home Assistant. Without it Mealie does not
+#      send anything to addresses in your home network.
+#   4. In Mealie, add a recipe action of the type POST with this address (the README says where):
+#        http://<home assistant>:8123/api/webhook/channel4_recipe
+#   5. Open a recipe in Mealie and run the action. The TV shows the first step.
+#
+# What you get
+#   script.channel4_recipe_next      Go to the next screen.
+#   script.channel4_recipe_previous  Go to the previous screen.
+#   script.channel4_recipe_show      Show the current screen again, or jump to another one.
+#   sensor.channel4_recipe           The name of the recipe. Its screens are in the attribute "pages".
+#   counter.channel4_recipe_page     The number of the screen that is showing, starting at 1.
+#
+# Every step gets its own screen. A step that does not fit on one screen continues on the next.
+
+automation:
+  - id: channel4_recipe_from_mealie
+    alias: "TV: recipe from Mealie"
+    description: Takes a recipe that Mealie sends and shows its first step on the channel4 TV.
+    mode: queued
+    trigger:
+      - platform: webhook
+        webhook_id: channel4_recipe
+        allowed_methods:
+          - POST
+        local_only: true
+    condition:
+      - condition: template
+        value_template: "{{ trigger.json is defined and trigger.json is mapping }}"
+    variables:
+      # Mealie sends the recipe inside "content". Older versions send the recipe itself, with names like recipeInstructions.
+      # The TV font only has plain ASCII, so everything else is spelled out or replaced before the lines are wrapped.
+      # A screen is 14 lines: the name and step number, an empty line and 12 lines of the step.
+      # Change 12 to 15 if your firmware is built with -DFBH=264.
+      recipe: >-
+        {%- macro plain(text) -%}
+          {%- set ns = namespace(t = text | default('', true) | string) -%}
+          {%- for from, to in [
+            ('\r', ''), ('[\t   ]', ' '), ('\\*\\*|__', ''),
+            ('ä', 'ae'), ('ö', 'oe'), ('ü', 'ue'), ('Ä', 'Ae'), ('Ö', 'Oe'), ('Ü', 'Ue'), ('ß', 'ss'),
+            ('[àáâãå]', 'a'), ('[èéêë]', 'e'), ('[ìíîï]', 'i'), ('[òóôõø]', 'o'), ('[ùúû]', 'u'),
+            ('ç', 'c'), ('ñ', 'n'), ('É', 'E'),
+            ('(?<=[0-9])(?=[½¼¾⅓⅔⅛])', ' '),
+            ('½', '1/2'), ('¼', '1/4'), ('¾', '3/4'), ('⅓', '1/3'), ('⅔', '2/3'), ('⅛', '1/8'),
+            (' ?°(?=[CF])', ' '), ('°', ' deg'),
+            ('[–—]', '-'), ('[“”„]', '"'), ('[‘’‚]', "'"), ('…', '...'), ('×', 'x'),
+            ('[^ -~\n]', '?'), ('\n{3,}', '\n\n')
+          ] -%}
+            {%- set ns.t = ns.t | regex_replace(from, to) -%}
+          {%- endfor -%}
+          {{- ns.t | trim -}}
+        {%- endmacro -%}
+        {%- set data = trigger.json | default({}, true) -%}
+        {%- set source = data.content if data.content is mapping else data -%}
+        {%- set name = plain(source.name) or 'Recipe' -%}
+        {%- set steps = source.recipe_instructions | default(source.recipeInstructions | default([], true), true)
+          | selectattr('text') | list -%}
+        {%- set ns = namespace(pages = []) -%}
+        {%- for step in steps -%}
+          {%- set number = loop.index -%}
+          {%- set title = plain(step.title) -%}
+          {%- set text = (title ~ ':\n' if title else '') ~ plain(step.text) -%}
+          {%- for lines in (text | wordwrap(36)).split('\n') | batch(12) -%}
+            {%- set tag = 'Step %d/%d' | format(number, steps | length)
+              ~ (' (%d/%d)' | format(loop.index, loop.length) if loop.length > 1 else '') -%}
+            {%- set width = 35 - tag | length -%}
+            {%- set ns.pages = ns.pages + ['%-*s %s' | format(width, name[:width], tag) ~ '\n\n' ~ lines | join('\n')] -%}
+          {%- endfor -%}
+        {%- endfor -%}
+        {{ {'name': name, 'pages': ns.pages or [name ~ '\n\nThis recipe has no steps.']} }}
+    action:
+      # The sensor below keeps the screens for the next and previous scripts.
+      - event: channel4_recipe
+        event_data:
+          name: "{{ recipe.name }}"
+          pages: "{{ recipe.pages }}"
+      - service: counter.set_value
+        target:
+          entity_id: counter.channel4_recipe_page
+        data:
+          value: 1
+      - service: script.channel4_message
+        data:
+          message: "{{ recipe.pages[0] }}"
+
+template:
+  - trigger:
+      - platform: event
+        event_type: channel4_recipe
+    sensor:
+      - name: "Channel4 recipe"
+        unique_id: channel4_recipe
+        icon: mdi:chef-hat
+        state: "{{ (trigger.event.data.name | string)[:255] }}"
+        attributes:
+          pages: "{{ trigger.event.data.pages }}"
+
+counter:
+  channel4_recipe_page:
+    name: "Channel4 recipe page"
+    icon: mdi:book-open-page-variant
+    initial: 1
+    minimum: 1
+
+script:
+  channel4_recipe_show:
+    alias: "TV: show recipe step"
+    description: Shows a screen of the recipe from Mealie on the channel4 TV.
+    icon: mdi:chef-hat
+    mode: queued
+    fields:
+      page:
+        name: Screen
+        description: The number of the screen to show, starting at 1. Leave it out to show the current one again.
+        selector:
+          number:
+            min: 1
+            max: 999
+    sequence:
+      - variables:
+          pages: "{{ state_attr('sensor.channel4_recipe', 'pages') or [] }}"
+      - variables:
+          show: "{{ [[page | default(states('counter.channel4_recipe_page'), true) | int(1), pages | length] | min, 1] | max }}"
+      - service: counter.set_value
+        target:
+          entity_id: counter.channel4_recipe_page
+        data:
+          value: "{{ show }}"
+      - service: script.channel4_message
+        data:
+          message: "{{ pages[show - 1] if pages else 'No recipe yet.\nSend one from Mealie.' }}"
+
+  channel4_recipe_next:
+    alias: "TV: next recipe step"
+    description: Shows the next screen of the recipe on the channel4 TV. It stays on the last one.
+    icon: mdi:page-next
+    mode: queued
+    sequence:
+      - service: script.channel4_recipe_show
+        data:
+          page: "{{ states('counter.channel4_recipe_page') | int(1) + 1 }}"
+
+  channel4_recipe_previous:
+    alias: "TV: previous recipe step"
+    description: Shows the previous screen of the recipe on the channel4 TV. It stays on the first one.
+    icon: mdi:page-previous
+    mode: queued
+    sequence:
+      - service: script.channel4_recipe_show
+        data:
+          page: "{{ states('counter.channel4_recipe_page') | int(1) - 1 }}"

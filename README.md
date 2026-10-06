@@ -23,6 +23,7 @@ Solder a wire to the RX pin, flash the board, tune an old TV to channel E4 and w
 - **A steady PAL picture.** `NO_INTERLACE` stops the picture from jumping up and down by half a line, see [No interlacing](#no-interlacing).
 - **Text from Home Assistant.** A text screen that you fill over WiFi, with a ready-made Home Assistant package.
 - **A pause for the TV signal while a screen is sent.** The TV signal slows the board's WiFi down so much that a full screen can take a minute. With the pause it takes a few seconds, see [Faster screens](#faster-screens).
+- **Recipes from Mealie.** A second package shows the steps of a [Mealie](https://mealie.io) recipe, one step per screen, see [Recipes from Mealie](#recipes-from-mealie).
 - **It stays on your WiFi.** channel3 switches back to its own access point at every start. This fork does not.
 - **A silent start.** With `START_SILENT` the TV signal only starts when something asks for a screen, and a command stops it again, see [Signal only when needed](#signal-only-when-needed).
 - **Updates over WiFi that check their work.** New firmware goes on over the network, is verified and only then takes over, see [Updating over WiFi](#updating-over-wifi).
@@ -536,6 +537,58 @@ If `CG` never arrives, the board ends the pause by itself, 8 seconds after the l
 The firmware has to know `CH` and `CG` for this. On a board with older firmware, leave the switch off.
 
 The script waits a tenth of a second after every command. With the signal off the board turns down most requests that follow each other at once: 4 of 30 were answered without a gap, 30 of 30 with a tenth of a second.
+### Recipes from Mealie
+
+A second package shows the steps of a [Mealie](https://mealie.io) recipe on the TV. You start it from the recipe in Mealie and page through the steps from Home Assistant. It needs the package from step 3.
+
+1. Copy [homeassistant/channel4_mealie.yaml](homeassistant/channel4_mealie.yaml) to `packages/channel4_mealie.yaml`, next to `channel4.yaml`, and restart Home Assistant.
+2. Allow Mealie to reach Home Assistant. Mealie does not send anything to addresses inside your home network unless you list them. Give the Mealie container this setting, with the address of Home Assistant, and start it again:
+
+   ```yaml
+   environment:
+     HTTP_ALLOW_LIST: 192.168.1.10
+   ```
+
+3. In Mealie, open the Data Management page, go to the recipe actions and create one:
+
+   | Field | Value |
+   |---|---|
+   | Title | `Show on TV` |
+   | Type | `post` |
+   | URL | `http://192.168.1.10:8123/api/webhook/channel4_recipe` |
+
+4. Open a recipe, and pick **Show on TV** from the recipe actions in its menu.
+
+The TV shows the first step:
+
+```
+Kaesespaetzle               Step 1/3
+
+Teig:
+400 g Mehl, 4 Eier, 1 1/2 TL Salz
+und 1/4 l Wasser zu einem zaehen
+Teig schlagen, bis er Blasen wirft.
+```
+
+Every step gets its own screen. A step that is longer than 12 lines continues on the next screen, and the top line then reads `Step 2/3 (1/2)`. These scripts move through the screens:
+
+| Name | What it does |
+|---|---|
+| `script.channel4_recipe_next` | Goes to the next screen. It stays on the last one. |
+| `script.channel4_recipe_previous` | Goes to the previous screen. It stays on the first one. |
+| `script.channel4_recipe_show` | Shows the current screen again, for example after another message. With `page` it jumps to that screen. |
+
+Put them on a dashboard as buttons, or on a wireless button next to the stove.
+
+`sensor.channel4_recipe` has the name of the recipe, and `counter.channel4_recipe_page` the number of the screen that is showing. Both are still there after a restart of Home Assistant. When you are done, `rest_command.channel4_demo` or `rest_command.channel4_stop` takes the recipe off the TV.
+
+Good to know:
+
+- **Special characters are spelled out.** `½` becomes `1/2`, `180 °C` becomes `180 C`, accents are dropped, and Markdown bold loses its stars. What is left over becomes `?`.
+- **Only the steps are shown**, not the ingredients.
+- **Mealie does not tell you if the action failed.** It only writes it to its own log, see [Troubleshooting](#troubleshooting).
+- **Use the address of Home Assistant in your home network.** The webhook does not take requests that come from the internet.
+- **This was tried with Mealie 3.28 and Home Assistant 2026.9**, with a program standing in for the board. Mealie versions that send the recipe on its own, without the wrapping around it, are handled too, but that was only tried with a made-up recipe.
 
 ### The commands behind it
 
@@ -584,6 +637,7 @@ The same commands also work as UDP packets to port 7878, without the address len
 | The three `rest_command`s are there but `script.channel4_message` is missing | The file was pasted into `configuration.yaml`, which already has a `script:` line. Use it as a package, see [step 3](#3-add-the-package-to-home-assistant). In the list of scripts it is called "TV: show message". |
 | Home Assistant warns `Setup of package 'channel4' failed: integration 'rest_command' has duplicate key 'url'` | The three commands are defined twice, in the package and somewhere else, usually a copy pasted into `configuration.yaml`. Remove that copy and restart. |
 | Home Assistant cannot reach the board | Open `http://<board>/d/issue?CC` in a browser. If that does not show `CC`, the address is wrong or the board is not on your WiFi. Its address is on the first demo screen. |
+| The recipe action in Mealie does nothing | Look at the log of Mealie. `invalid request on local resource` means Mealie is not allowed to reach Home Assistant, set `HTTP_ALLOW_LIST` as in [Recipes from Mealie](#recipes-from-mealie). If the log is clean, check the address of the action. If your `configuration.yaml` has no `default_config:` line, add a line `webhook:`. |
 | Text from Home Assistant ends in `?` or odd characters | The line was too long for the firmware's 78 character address limit. Use `script.channel4_message`, which keeps lines short enough. |
 | Coarse diagonal stripes | The carrier frequency has a long bit pattern. See [Why 62.5 MHz](#why-625-mhz). |
 | Text on a gray background instead of black | Turn the brightness of the TV down and the contrast up. If that is not enough, try `WHITE_BORDER`. |

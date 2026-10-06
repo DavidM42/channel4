@@ -20,6 +20,9 @@ Solder a wire to the RX pin, flash the board, tune an old TV to channel E4 and w
 - **It broadcasts on European channel E4** (62.5 MHz) instead of US channel 3 (61.25 MHz), hence the name.
 - **Black and white mode.** `MONOCHROME` leaves out all NTSC color information. The colors become clean shades of gray instead of hatching.
 - **Optional bright border** for TVs that show dark screens as gray.
+- **Text from Home Assistant.** A text screen that you fill over WiFi, with a ready-made Home Assistant package.
+- **It stays on your WiFi.** channel3 switches back to its own access point at every start. This fork does not.
+- **A filter for the antenna pin.** The TV signal jams the board's own WiFi. Two small parts at the pin fix most of that, see [WiFi and the TV signal](#wifi-and-the-tv-signal).
 - **PAL and black and white are switched on by default** in `user.cfg`.
 - **Setup, build and flash instructions** for macOS and Linux, below.
 
@@ -30,6 +33,7 @@ Everything else, including the web interface and the demo screens, is channel3.
 - **An ESP8266 board with USB and 4 MB of flash.** A Wemos D1 Mini is what this was built and tested on.
 - **A USB cable that carries data.** Many micro USB cables only charge. If no serial port shows up, try another cable first.
 - **A piece of wire** for the antenna, 20 to 30 cm to start with. See [Antenna](#antenna).
+- **A 100 ohm resistor and a 10 pF capacitor**, if you want to use WiFi while it broadcasts. See [The filter at the pin](#the-filter-at-the-pin).
 - **An analog TV that receives VHF band I** (often labeled VHF-L or VL) in the B/G standard used in most of continental Europe.
 - **A Mac or a Linux PC.** macOS on Apple Silicon was used for everything here, including flashing. On Linux the setup and build steps were checked on Ubuntu 24.04. Flashing from Linux was not tried, it is the same esptool command.
 
@@ -181,7 +185,7 @@ Three things worth knowing:
 
 ### 6. Watch TV
 
-1. Connect the wire to the pin labeled **RX** (GPIO3) and power the board from any USB supply.
+1. Connect the wire to the pin labeled **RX** (GPIO3), best through [the filter](#the-filter-at-the-pin), and power the board from any USB supply.
 2. Switch the TV to VHF band I (VHF-L, VL) and tune to channel E4, 62.5 MHz. On a set with a tuning wheel, turn slowly through the lower part of the band until the picture appears.
 3. Set brightness so the background of a text screen is just black, then contrast so the text is crisp.
 
@@ -195,6 +199,7 @@ All of these are lines in `user.cfg`. A `#` in front switches a line off.
 |---|---|
 | `OPTS += -DPAL` | PAL timing: 625 lines, 50 fields per second. Off means NTSC. |
 | `OPTS += -DMONOCHROME` | Black and white only. No colorburst, and the colors become shades of gray. |
+| `OPTS += -DFBH=264` | Full height PAL picture, 264 lines instead of 220. The web page then runs out of memory, see [Picture size and memory](#picture-size-and-memory). |
 | `OPTS += -DWHITE_BORDER` | Paints the visible area left, right and above the picture bright instead of black. |
 | `OPTS += -DBORDER_LEVEL=13` | How bright that border is. Only used together with `WHITE_BORDER`. |
 
@@ -224,9 +229,24 @@ If it is not, `WHITE_BORDER` gives the TV something bright to go by on every scr
 
 The lines below the picture always stay black. Bright lines running right up to the vertical sync made the whole picture bounce on the TV this was tried on.
 
+### Picture size and memory
+
+The picture is 220 lines high by default, also for PAL. It sits in the middle of the screen with a black strip above and below, and the text screen has 14 lines.
+
+`FBH=264` fills a PAL screen and gives the text screen 17 lines. The 44 extra lines cost 5 kB of RAM, and the web page needs that memory. Measured with a clean WiFi link (RX pin silent, see [WiFi and the TV signal](#wifi-and-the-tv-signal)), loading the web page the way a browser does:
+
+| Build | Page loads that completed | Lowest free memory |
+|---|---|---|
+| 220 lines (default) | 8 of 8 | 2.6 kB |
+| 264 lines | 0 of 8 | 0.5 kB |
+
+Single small requests, like the text commands from Home Assistant, worked with both: 30 of 30.
+
+To see how much memory is free on your board, open `http://<board>/d/issue?I`. It is the last number.
+
 ## Antenna
 
-The antenna is a plain wire on the **RX** pin.
+The antenna is a plain wire on the **RX** pin. For the picture alone that is all you need. If you also want WiFi to work, put [the filter](#the-filter-at-the-pin) between the pin and the wire.
 
 - **Start with 20 to 30 cm**, laid near the TV or its aerial. That is enough across a table or a room.
 - **A full quarter wave is about 1.15 m** on channel E4. Only go there if the short wire gives a snowy picture.
@@ -234,7 +254,48 @@ The antenna is a plain wire on the **RX** pin.
 
 For other channels, a quarter wave in meters is about 71 divided by the frequency in MHz.
 
+**Keep the wire away from the board's own antenna**, the zigzag trace at the end of the ESP8266 module. The TV signal disturbs the board's WiFi, see [WiFi and the TV signal](#wifi-and-the-tv-signal).
+
 **The antenna can block flashing.** RX is also the pin the USB chip uses to talk to the ESP8266. A wire hanging free is no problem. A wire that is plugged into a TV aerial socket, or touches grounded metal, holds the pin down, and esptool ends with `No serial data received`. Unplug the far end of the wire while you flash.
+
+## WiFi and the TV signal
+
+The TV signal on the RX pin disturbs the board's own WiFi. Without a filter the web page loads slowly or not at all, text commands get lost for minutes at a time, and the board's own network is hard to find and join.
+
+### The filter at the pin
+
+Two parts between the RX pin and the antenna wire fix most of it:
+
+```
+RX pin ───[ 100 ohm ]───┬─── antenna wire
+                        │
+                      10 pF
+                        │
+                       GND
+```
+
+- **100 ohms in series**, soldered as close to the RX pin as you can.
+- **10 pF to ground**, from the wire side of the resistor.
+
+The TV channel passes almost unchanged. What is held back is the part of the signal up in the 2.4 GHz band, which is what the wire radiates straight into the board's WiFi antenna.
+
+Keep the wire itself away from the end of the board that has the WiFi antenna.
+
+### What was measured
+
+On a D1 Mini with a wire antenna on RX, on a home WiFi. All three columns are the same firmware:
+
+| | RX pin silent | TV signal, no filter | TV signal, with filter |
+|---|---|---|---|
+| Small web requests answered correctly | 30 of 30 | 25 of 30 | 29 of 30 |
+| The same with the text screen showing | not measured | 35 of 90, with one silence of 5 minutes | 85 of 90, no silences |
+| Files of the web page, one after another (126 kB) | all complete, 1 second | first page loads, the scripts stall after 4 kB | all complete, 8 seconds |
+| Web page loaded the way a browser does | 8 of 8 | did not complete | 5 of 8 |
+| Board's own network shows up in WiFi scans | 10 of 10 | 8 of 16, with long gaps | not measured |
+
+So the filter makes WiFi usable, but not as good as with the pin silent. Text commands get through, and the web page loads, sometimes only at the second try.
+
+It is not the processor load and not memory. With the whole video generator running and only the pin switched off, WiFi was fine, and free memory was the same. Moving the board's network to another WiFi channel (6 or 11 instead of 1) did not cure it either.
 
 ## PAL
 
@@ -243,7 +304,7 @@ For other channels, a quarter wave in meters is about 71 divided by the frequenc
 - **Timing is PAL.** 625 lines, 64 microseconds each, switched on with `-DPAL`. This part came with channel3.
 - **There is no PAL color.** The color signal in the tables is NTSC. A PAL color set shows the picture in black and white, a black and white set never cared. With `MONOCHROME` the color signal is left out completely.
 - **There is no sound.**
-- **The picture is 232 x 264** in the sharp black and white mode that the text uses, and 116 x 264 with 16 colors or grays.
+- **The picture is 232 x 220** in the sharp black and white mode that the text uses, and 116 x 220 with 16 colors or grays. A PAL screen has room for 264 lines, see [Picture size and memory](#picture-size-and-memory).
 - **It is made for B/G sets**, the standard in most of continental Europe. French SECAM L sets use a different kind of modulation and will not show it. Sets that only have UHF, as many in the UK and Ireland do, cannot tune this low.
 
 ### Why 62.5 MHz
@@ -284,9 +345,109 @@ Rules for picking a frequency:
 
 Only 62.5 MHz and 62.27 MHz have been tried on a real TV here.
 
-### Known issue
+## Home Assistant
 
-In PAL the bottom 9 lines of the picture repeat the top 9 lines of the framebuffer. The line counter is 8 bits wide and the PAL picture has 265 lines. The demo screens leave those lines empty, so you do not see it there.
+The firmware has a text screen that you fill over WiFi, one line at a time. Home Assistant can do that with its built-in `rest_command`, so there is nothing extra to install.
+
+### 1. Put the board on your WiFi
+
+Out of the box the board opens its own network. For Home Assistant to reach it, it has to join yours.
+
+1. Join the board's `ESP_...` network and open http://192.168.4.1.
+2. Open **Wifi Settings**, pick **Station**, enter the name (SSID) and password of your WiFi, and press **Change Settings**.
+3. The board leaves its own network and joins yours. The first demo screen on the TV shows the address it got, on the line starting with `IP:`.
+4. Tell your router to always give the board that address.
+
+If the board cannot get onto your WiFi after a few tries, it opens its own network again so you can correct the settings.
+
+If the page does not load completely, one address does the same as the form:
+
+```
+http://192.168.4.1/d/issue?W1%09YOUR-WIFI-NAME%09YOUR-PASSWORD
+```
+
+`%09` is what the firmware expects between the parts. Name and password together have to stay under about 60 characters. Like the form, this sends your password unencrypted over the board's open network.
+
+Once the board is on your WiFi, open `http://<board>/d/issue?CW`. That makes sure the network is stored, so the board comes back to it after a power cut. The reply should start with `CW 1 1 1`.
+
+### 2. Try it without Home Assistant
+
+Open this in a browser, with the address of your board:
+
+```
+http://192.168.1.50/d/issue?CT00Hello+World
+```
+
+The TV switches to the text screen and shows `Hello World` on the top line. The browser shows `CT`.
+
+### 3. Add the package to Home Assistant
+
+1. Open [homeassistant/channel4.yaml](homeassistant/channel4.yaml) and replace `192.168.1.50` with the address of your board. It appears three times.
+2. Copy the file to `packages/channel4.yaml` in your Home Assistant configuration folder.
+3. Make sure `configuration.yaml` loads packages:
+
+   ```yaml
+   homeassistant:
+     packages: !include_dir_named packages
+   ```
+
+4. Restart Home Assistant.
+
+Do not paste the contents of the file into `configuration.yaml` instead. That file usually already has a `script:` line, Home Assistant only keeps the last one it finds, and then either this script or all your own scripts are missing. The log shows `contains duplicate key "script"` when that happens.
+
+The script is listed under its name, **TV: show message**. `script.channel4_message` is its entity ID.
+
+### 4. Use it
+
+The package gives you one script and three commands.
+
+| Name | What it does |
+|---|---|
+| `script.channel4_message` | Shows a message. Wraps long lines, handles line breaks, spells out umlauts. |
+| `rest_command.channel4_line` | Sets one line and switches to the text screen. Line 0 is the top one. |
+| `rest_command.channel4_clear` | Empties the text screen and switches to it. |
+| `rest_command.channel4_demo` | Goes back to the demo. |
+
+For example, as the action of an automation:
+
+```yaml
+- service: script.channel4_message
+  data:
+    message: |-
+      Washing machine
+      is done
+```
+
+Or one line that changes while the rest stays:
+
+```yaml
+- service: rest_command.channel4_line
+  data:
+    line: 3
+    text: "Living room {{ states('sensor.living_room_temperature') }} C"
+```
+
+### The commands behind it
+
+These are ordinary channel3 custom commands, so anything that can open a web address can use them. Put them after `http://<board>/d/issue?`.
+
+| Command | What it does | Reply |
+|---|---|---|
+| `CT` + two digits + text, like `CT03Hello` | Puts the text on that line and shows the text screen. No text empties the line. | `CT`, or `!CT` if there is no such line |
+| `CX` | Empties all lines and shows the text screen. | `CX` |
+| `CD` | Goes back to the demo, starting with its first screen. | `CD` |
+| `CW` | Stores the WiFi network the board is on, if it is not stored yet. | `CW`, then four numbers: mode now, mode stored (1 is on a network, 2 is its own access point), 1 if the stored network is the one in use, free memory |
+
+The same commands also work as UDP packets to port 7878, without the address length limit below.
+
+### Limits
+
+- **36 characters per line.** Longer text is cut off. There are 14 lines (00 to 13), or 17 with `-DFBH=264`.
+- **Web addresses are cut at 78 characters** by the firmware. That leaves 65 for the text after it has been encoded. Write spaces as `+`, which costs one character instead of the three of `%20`. The package does that for you.
+- **The font only has plain ASCII.** German umlauts are spelled out (`ä` becomes `ae`, `ß` becomes `ss`). Any other special character becomes `?`.
+- **The text is gone after a power cut.** The board starts with the demo again.
+- **There is no password.** Everybody on your network can write on your TV.
+- **A command can get lost.** With the text screen showing and [the filter](#the-filter-at-the-pin) fitted, 85 of 90 requests were answered correctly. Without the filter it was 35 of 90, with minutes of silence in between.
 
 ## Troubleshooting
 
@@ -302,6 +463,14 @@ In PAL the bottom 9 lines of the picture repeat the top 9 lines of the framebuff
 | `No serial data received` | The antenna is holding the RX pin down. Unplug its far end while flashing. See [Antenna](#antenna). |
 | Flashing worked, but there is no picture and no WiFi network | Flash again with the long first-time command, including `-fs 4MB`. |
 | The web page does not load | `web/page.mpfs` is not on the board. Flash with the long first-time command. |
+| The web page loads slowly, or only shows "Introduction" and "NTSC" | The TV signal disturbs the board's WiFi. Fit [the filter at the pin](#the-filter-at-the-pin). With it the page can still need a second try. |
+| The board's own network `ESP_...` is missing from the list, or joining it fails | Same cause, fit the filter. Without it the network comes and goes, try again a few times. |
+| Text from Home Assistant does not arrive for minutes | Same cause, fit the filter. |
+| The board is back on its own network after a restart | Put it on your WiFi again, then open `http://<board>/d/issue?CW`. The reply should start with `CW 1 1 1`. |
+| The three `rest_command`s are there but `script.channel4_message` is missing | The file was pasted into `configuration.yaml`, which already has a `script:` line. Use it as a package, see [step 3](#3-add-the-package-to-home-assistant). In the list of scripts it is called "TV: show message". |
+| Home Assistant warns `Setup of package 'channel4' failed: integration 'rest_command' has duplicate key 'url'` | The three commands are defined twice, in the package and somewhere else, usually a copy pasted into `configuration.yaml`. Remove that copy and restart. |
+| Home Assistant cannot reach the board | Open `http://<board>/d/issue?CC` in a browser. If that does not show `CC`, the address is wrong or the board is not on your WiFi. Its address is on the first demo screen. |
+| Text from Home Assistant ends in `?` or odd characters | The line was too long for the firmware's 78 character address limit. Use `script.channel4_message`, which keeps lines short enough. |
 | Coarse diagonal stripes | The carrier frequency has a long bit pattern. See [Why 62.5 MHz](#why-625-mhz). |
 | Text on a gray background instead of black | Turn the brightness of the TV down and the contrast up. If that is not enough, try `WHITE_BORDER`. |
 | The picture rolls or bounces | Adjust V-hold on the TV to the middle of the range where the picture stands still. |

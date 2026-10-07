@@ -2,7 +2,7 @@
 #
 # Setup
 #   1. Put the board on your home WiFi and give it a fixed IP address (see the README).
-#   2. Replace 192.168.1.50 below with that address. It appears four times.
+#   2. Replace 192.168.1.50 below with that address. It appears six times.
 #   3. Copy this file to <config>/packages/channel4.yaml and make sure configuration.yaml has
 #        homeassistant:
 #          packages: !include_dir_named packages
@@ -10,10 +10,17 @@
 #
 # What you get
 #   script.channel4_message      Show a message. Wraps long lines and handles line breaks.
+#   script.channel4_send         Send one command to the board, with up to three tries.
 #   rest_command.channel4_line   Set one line (0 is the top one) and show the text screen.
 #   rest_command.channel4_clear  Empty the text screen and show it.
 #   rest_command.channel4_demo   Go back to the demo.
 #   rest_command.channel4_stop   Stop the TV signal. The three commands above start it again.
+#   rest_command.channel4_hold   Pause the TV signal while a screen is filled. Lines do not start it again.
+#   rest_command.channel4_show   End that pause and show the text screen.
+#   input_boolean.channel4_pause_signal
+#                                Switch it on, and the message script pauses the TV signal while it sends.
+#                                The TV shows snow for a moment, but the screen is there much sooner,
+#                                because the TV signal slows the WiFi of the board down.
 #
 # The screen holds 14 lines of 36 characters (17 if the firmware is built with -DFBH=264).
 # The board forgets the text when it loses power.
@@ -26,11 +33,12 @@ rest_command:
     url: >-
       http://192.168.1.50/d/issue?CT{{ '%02d' | format(line | int) }}{{
       ((text | string)[:36] | urlencode | replace('%20', '+'))[:65] | regex_replace('(%[C-F][0-9A-F])?(%[0-9A-F]?)?$', '') }}
-    timeout: 5
+    # The board answers within a fraction of a second or not at all, so a short wait and another try is faster.
+    timeout: 2
 
   channel4_clear:
     url: "http://192.168.1.50/d/issue?CX"
-    timeout: 5
+    timeout: 2
 
   channel4_demo:
     url: "http://192.168.1.50/d/issue?CD"
@@ -39,6 +47,20 @@ rest_command:
   channel4_stop:
     url: "http://192.168.1.50/d/issue?CS"
     timeout: 5
+
+  # The board ends the pause by itself eight seconds after the last command, in case the show command gets lost.
+  channel4_hold:
+    url: "http://192.168.1.50/d/issue?CH"
+    timeout: 2
+
+  channel4_show:
+    url: "http://192.168.1.50/d/issue?CG"
+    timeout: 2
+
+input_boolean:
+  channel4_pause_signal:
+    name: "TV: pause signal while sending"
+    icon: mdi:television-pause
 
 script:
   channel4_message:
@@ -56,7 +78,19 @@ script:
           text:
             multiline: true
     sequence:
-      - service: rest_command.channel4_clear
+      - variables:
+          pause: "{{ is_state('input_boolean.channel4_pause_signal', 'on') }}"
+      - if: "{{ pause }}"
+        then:
+          - service: script.channel4_send
+            data:
+              command: hold
+      - service: script.channel4_send
+        response_variable: sent
+      - if: "{{ sent.status | default(0) != 200 }}"
+        then:
+          - stop: The channel4 board did not answer.
+            error: true
       - repeat:
           # The TV font has no umlauts. Spell them out first so that wrapping counts the right length.
           # Change 14 to 17 if your firmware is built with -DFBH=264.
@@ -67,7 +101,63 @@ script:
             {%- endfor -%}
             {{ (ns.t | wordwrap(36)).split('\n')[:14] }}
           sequence:
-            - service: rest_command.channel4_line
-              data:
-                line: "{{ repeat.index - 1 }}"
-                text: "{{ repeat.item }}"
+            # The data goes out in one piece, or Home Assistant strips the spaces at the start of a line.
+            - service: script.channel4_send
+              data: "{{ {'line': repeat.index - 1, 'text': repeat.item} }}"
+      - if: "{{ pause }}"
+        then:
+          - service: script.channel4_send
+            data:
+              command: show
+
+  channel4_send:
+    alias: "TV: send command"
+    description: >-
+      Sets one line of the channel4 TV, or empties the screen if no line is given.
+      A command can get lost while the TV signal is on, so it is tried up to three times.
+      The pause command gets six tries.
+    icon: mdi:television-classic
+    mode: queued
+    fields:
+      command:
+        name: Command
+        description: Leave it out to set a line or empty the screen. "hold" pauses the TV signal, "show" ends the pause.
+        selector:
+          select:
+            options:
+              - hold
+              - show
+      line:
+        name: Line
+        description: The line to set, 0 is the top one. Leave it out to empty the whole screen.
+        selector:
+          number:
+            min: 0
+            max: 16
+      text:
+        name: Text
+        description: The text for the line.
+        selector:
+          text:
+    sequence:
+      - repeat:
+          sequence:
+            - variables:
+                reply: {}
+            - service: "rest_command.channel4_{{ command | default('clear' if line is undefined else 'line') }}"
+              data: "{{ {'line': line | default(0), 'text': text | default('')} }}"
+              response_variable: reply
+              continue_on_error: true
+            # A short breath before the next try. The board turns a request down while it is still busy with the last one.
+            - if: "{{ reply.status | default(0) != 200 }}"
+              then:
+                - delay:
+                    milliseconds: 300
+          # The pause command is the one that has to get through while the TV signal still disturbs the WiFi. It gets six tries.
+          until: "{{ reply.status | default(0) == 200 or repeat.index >= (6 if command | default('') == 'hold' else 3) }}"
+      # The board needs a moment before the next request. With the TV signal paused, most requests that follow at once fail.
+      - delay:
+          milliseconds: 100
+      # The reply goes back to the caller. It is empty if the board did not answer.
+      - stop: Done.
+        response_variable: reply

@@ -22,6 +22,7 @@ Solder a wire to the RX pin, flash the board, tune an old TV to channel E4 and w
 - **Optional bright border** for TVs that show dark screens as gray.
 - **A steady PAL picture.** `NO_INTERLACE` stops the picture from jumping up and down by half a line, see [No interlacing](#no-interlacing).
 - **Text from Home Assistant.** A text screen that you fill over WiFi, with a ready-made Home Assistant package.
+- **A pause for the TV signal while a screen is sent.** The TV signal slows the board's WiFi down so much that a full screen can take a minute. With the pause it takes a few seconds, see [Faster screens](#faster-screens).
 - **It stays on your WiFi.** channel3 switches back to its own access point at every start. This fork does not.
 - **A silent start.** With `START_SILENT` the TV signal only starts when something asks for a screen, and a command stops it again, see [Signal only when needed](#signal-only-when-needed).
 - **Updates over WiFi that check their work.** New firmware goes on over the network, is verified and only then takes over, see [Updating over WiFi](#updating-over-wifi).
@@ -439,7 +440,7 @@ The TV switches to the text screen and shows `Hello World` on the top line. The 
 
 ### 3. Add the package to Home Assistant
 
-1. Open [homeassistant/channel4.yaml](homeassistant/channel4.yaml) and replace `192.168.1.50` with the address of your board. It appears four times.
+1. Open [homeassistant/channel4.yaml](homeassistant/channel4.yaml) and replace `192.168.1.50` with the address of your board. It appears six times.
 2. Copy the file to `packages/channel4.yaml` in your Home Assistant configuration folder.
 3. Make sure `configuration.yaml` loads packages:
 
@@ -456,15 +457,19 @@ The script is listed under its name, **TV: show message**. `script.channel4_mess
 
 ### 4. Use it
 
-The package gives you one script and three commands.
+The package gives you two scripts, six commands and a switch.
 
 | Name | What it does |
 |---|---|
 | `script.channel4_message` | Shows a message. Wraps long lines, handles line breaks, spells out umlauts. |
+| `script.channel4_send` | Sets one line, or empties the screen if you give it no line. Tries up to three times if the board does not answer. The script above uses it. |
 | `rest_command.channel4_line` | Sets one line and switches to the text screen. Line 0 is the top one. |
 | `rest_command.channel4_clear` | Empties the text screen and switches to it. |
 | `rest_command.channel4_demo` | Goes back to the demo. |
 | `rest_command.channel4_stop` | Stops the TV signal. Any of the three above starts it again. |
+| `rest_command.channel4_hold` | Pauses the TV signal while a screen is filled. Lines and clearing do not start it again. |
+| `rest_command.channel4_show` | Ends the pause and shows the text screen. |
+| `input_boolean.channel4_pause_signal` | Switch it on and `script.channel4_message` pauses the TV signal while it sends, see [Faster screens](#faster-screens). |
 
 For example, as the action of an automation:
 
@@ -485,6 +490,24 @@ Or one line that changes while the rest stays:
     text: "Living room {{ states('sensor.living_room_temperature') }} C"
 ```
 
+### Faster screens
+
+The TV signal on the RX pin disturbs the board's own WiFi. A screen is 15 requests, and with the signal on each of them can take seconds or get lost. The same 14 line screen took between 30 and 70 seconds here, and sometimes lines were missing.
+
+With the signal off the board answers at once. So the message script can pause the signal for the time it sends: switch on **TV: pause signal while sending** (`input_boolean.channel4_pause_signal`). The TV shows snow for a moment, then the complete screen. In ten tries that took 3 to 6 seconds, and no line was lost.
+
+What happens in between:
+
+1. `CH` pauses the signal. This one command still has to get through with the signal on, so it gets six tries.
+2. The screen is emptied and filled. These commands do not start the signal again while the pause lasts.
+3. `CG` ends the pause. The signal comes back two tenths of a second later, so that the reply to `CG` gets out first.
+
+If `CG` never arrives, the board ends the pause by itself, 8 seconds after the last command. If the pause command does not get through at all, the screen is sent the slow way.
+
+The firmware has to know `CH` and `CG` for this. On a board with older firmware, leave the switch off.
+
+The script waits a tenth of a second after every command. With the signal off the board turns down most requests that follow each other at once: 4 of 30 were answered without a gap, 30 of 30 with a tenth of a second.
+
 ### The commands behind it
 
 These are ordinary channel3 custom commands, so anything that can open a web address can use them. Put them after `http://<board>/d/issue?`.
@@ -495,6 +518,8 @@ These are ordinary channel3 custom commands, so anything that can open a web add
 | `CX` | Empties all lines and shows the text screen. | `CX` |
 | `CD` | Goes back to the demo, starting with its first screen. | `CD` |
 | `CS` | Stops the TV signal. `CT`, `CX`, `CD` and the web page start it again. | `CS` |
+| `CH` | Pauses the TV signal while a screen is filled. `CT` and `CX` do not start it again. The pause ends with `CG`, or by itself 8 seconds after the last of them. | `CH` |
+| `CG` | Ends the pause and shows the text screen, two tenths of a second later. | `CG` |
 | `CW` | Stores the WiFi network the board is on, if it is not stored yet. | `CW`, then four numbers: mode now, mode stored (1 is on a network, 2 is its own access point), 1 if the stored network is the one in use, free memory |
 
 The same commands also work as UDP packets to port 7878, without the address length limit below.
@@ -506,7 +531,7 @@ The same commands also work as UDP packets to port 7878, without the address len
 - **The font only has plain ASCII.** German umlauts are spelled out (`ä` becomes `ae`, `ß` becomes `ss`). Any other special character becomes `?`.
 - **The text is gone after a power cut.** The board starts with the demo again.
 - **There is no password.** Everybody on your network can write on your TV.
-- **A command can get lost.** With the text screen showing and [the filter](#the-filter-at-the-pin) fitted, 85 of 90 requests were answered correctly. Without the filter it was 35 of 90, with minutes of silence in between.
+- **A command can get lost.** With the text screen showing and [the filter](#the-filter-at-the-pin) fitted, 85 of 90 requests were answered correctly. Without the filter it was 35 of 90, with minutes of silence in between. `script.channel4_message` and `script.channel4_send` try each command up to three times. The `rest_command`s do not.
 
 ## Troubleshooting
 

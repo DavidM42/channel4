@@ -28,6 +28,7 @@ Solder a wire to the RX pin, flash the board, tune an old TV to channel E4 and w
 - **Updates over WiFi that check their work.** New firmware goes on over the network, is verified and only then takes over, see [Updating over WiFi](#updating-over-wifi).
 - **A filter for the antenna pin.** The TV signal jams the board's own WiFi. Two small parts at the pin fix most of that, see [WiFi and the TV signal](#wifi-and-the-tv-signal).
 - **PAL, black and white and no interlacing are switched on by default** in `user.cfg`.
+- **A cable instead of an antenna.** A small board for the D1 Mini feeds the signal into the antenna socket of the TV, see [By cable instead of an antenna](#by-cable-instead-of-an-antenna).
 - **Setup, build and flash instructions** for macOS and Linux, below.
 
 Everything else, including the web interface and the demo screens, is channel3.
@@ -315,6 +316,34 @@ For other channels, a quarter wave in meters is about 71 divided by the frequenc
 **Keep the wire away from the board's own antenna**, the zigzag trace at the end of the ESP8266 module. The TV signal disturbs the board's WiFi, see [WiFi and the TV signal](#wifi-and-the-tv-signal).
 
 **The antenna can block flashing.** RX is also the pin the USB chip uses to talk to the ESP8266. A wire hanging free is no problem. A wire that is plugged into a TV aerial socket, or touches grounded metal, holds the pin down, and esptool ends with `No serial data received`. Unplug the far end of the wire while you flash.
+
+### By cable instead of an antenna
+
+A TV with a socket for an outside antenna can get the signal by cable. Nothing is radiated then, and it no longer matters for the picture where the board and the TV stand. Here the picture rolled whenever the wire antenna lay next to large metal, a fridge or a microwave oven. By cable it stands still.
+
+The pin puts out far more than a TV input wants, so a few parts go in between:
+
+```
+RX ──[ 100R ]──┬──[ 2k2 ]──┬──[ 1 nF to 1 µF ]──── tip of the plug
+               │           │
+             10 pF      [ 75R ]
+               │           │
+GND ───────────┴───────────┴────────────────────── sleeve of the plug
+```
+
+- **100 ohms and 10 pF** are [the filter at the pin](#the-filter-at-the-pin).
+- **2.2 kΩ** takes the signal down. With 10 kΩ the picture was gone here, with 1 kΩ it rolled now and then.
+- **75 ohms** to ground match the cable.
+- **The capacitor** keeps DC from flowing between the board and the TV. On an electrolytic one the plus side goes towards the board.
+
+[hardware/tv-shield](hardware/tv-shield/) has a board for these parts that sits on a D1 Mini. It has not been made yet.
+
+Good to know:
+
+- **Measure the socket first.** With the TV on, there should be about 0 V DC between its two contacts. This was tried on an IGS TV201, a small black and white portable with a 3.5 mm socket marked `EXT ANT 75Ω`.
+- **Plug the cable in with both devices switched off.** They run from two power supplies.
+- **The power supply of the board can get into the picture.** Bands and patterns went away here when the board ran from a battery. Try another USB power supply if you see them.
+- **The WiFi of the board is still disturbed.** The cable made it better, not good. For screens of text, see [Faster screens](#faster-screens).
 
 ## WiFi and the TV signal
 

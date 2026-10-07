@@ -17,6 +17,19 @@ int ICACHE_FLASH_ATTR CustomCommand(char * buffer, int retsize, char *pusrdata, 
 {
 	char * buffend = buffer;
 
+	//ch   Pauses the TV signal while a screen gets filled.  CT and CX do not start it again until CG.
+	//cg   Ends the pause and shows the text screen.
+	//These two are not in the switch below.  With them in it the compiler builds a jump table that takes 230 bytes of RAM.
+	if( ( pusrdata[1] | 0x20 ) == 'h' || ( pusrdata[1] | 0x20 ) == 'g' )
+	{
+		buffer[0] = 'C';
+		buffer[1] = pusrdata[1] & ~0x20;
+		//CG lets the pause run out in two tenths of a second instead of ending it here, so that its reply
+		//gets out before the TV signal is back.  Otherwise the sender waits for a reply that got lost.
+		if( buffer[1] == 'H' ) TVTextHold(); else tvtext_hold = 2;
+		return 2;
+	}
+
 	switch( pusrdata[1] )
 	{
 	case 'C': case 'c': //Custom command test
@@ -36,6 +49,7 @@ int ICACHE_FLASH_ATTR CustomCommand(char * buffer, int retsize, char *pusrdata, 
 		showallowadvance = (rh << 4) | fromhex1( *(bp++) );
 		rh = fromhex1( *(bp++) );
 		jam_color = (rh << 4) | fromhex1( *(bp++) );
+		tvtext_hold = 0;
 		VideoTransmit( 1 );
 		break;
 	}
@@ -72,6 +86,7 @@ int ICACHE_FLASH_ATTR CustomCommand(char * buffer, int retsize, char *pusrdata, 
 			premodulated_table[i*PREMOD_SIZE + ch] = premodulated_table[(i-PREMOD_ENTRIES)*PREMOD_SIZE + ch];
 		}
 
+		tvtext_hold = 0;
 		VideoTransmit( 1 );
 		break;
 	}
@@ -92,8 +107,7 @@ int ICACHE_FLASH_ATTR CustomCommand(char * buffer, int retsize, char *pusrdata, 
 			return buffend-buffer;
 		}
 
-		showstate = TVTEXT_SHOWSTATE;
-		VideoTransmit( 1 );
+		if( tvtext_hold ) TVTextHold(); else TVTextShow();
 		buffend += ets_sprintf( buffend, "CT" );
 		return buffend-buffer;
 	}
@@ -101,8 +115,7 @@ int ICACHE_FLASH_ATTR CustomCommand(char * buffer, int retsize, char *pusrdata, 
 	case 'x': case 'X': //cx   Empties the text screen and shows it.
 	{
 		TVTextClear();
-		showstate = TVTEXT_SHOWSTATE;
-		VideoTransmit( 1 );
+		if( tvtext_hold ) TVTextHold(); else TVTextShow();
 		buffend += ets_sprintf( buffend, "CX" );
 		return buffend-buffer;
 	}
@@ -138,6 +151,7 @@ int ICACHE_FLASH_ATTR CustomCommand(char * buffer, int retsize, char *pusrdata, 
 		showallowadvance = 1;
 		framessostate = 0;
 		showtemp = 0;
+		tvtext_hold = 0;
 		VideoTransmit( 1 );
 		buffend += ets_sprintf( buffend, "CD" );
 		return buffend-buffer;
@@ -145,6 +159,7 @@ int ICACHE_FLASH_ATTR CustomCommand(char * buffer, int retsize, char *pusrdata, 
 
 	case 's': case 'S': //cs   Stops the TV signal.  Any command that shows something starts it again: CT, CX, CD, CO, CV.
 	{
+		tvtext_hold = 0;
 		VideoTransmit( 0 );
 		buffend += ets_sprintf( buffend, "CS" );
 		return buffend-buffer;

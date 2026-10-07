@@ -23,4 +23,21 @@ void TVTextClear();
 //Returns 0, or -1 if there is no such line.
 int TVTextSetLine( int line, const char * text, int len );
 
+//Pausing the TV signal while a screen gets filled.  The signal on the pin slows the board's own WiFi down a lot,
+//so the lines of a screen arrive much faster without it.  CH starts the pause, CG ends it and shows the text.
+//If CG never comes, the signal comes back by itself this long after the last text command, in tenths of a second.
+//It has to be longer than the sender waits for a reply (5 s in the Home Assistant package), or one slow request ends the pause.
+#define TVTEXT_HOLD_TICKS 80
+
+extern uint8_t tvtext_hold; //Tenths of a second the pause still lasts, 0 if there is none.
+
+//Starts the pause, or makes a running one last the full time again.
+void TVTextHold();
+
+//Ends the pause if there is one, and shows the text screen.
+void TVTextShow();
+
+//Call every tenth of a second.
+void TVTextTick();
+
 #endif

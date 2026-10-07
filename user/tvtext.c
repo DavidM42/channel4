@@ -4,6 +4,30 @@
 #include "tvtext.h"
 
 char tvtext[TVTEXT_LINES][TVTEXT_COLS+1];
+uint8_t tvtext_hold;
+
+extern uint8_t showstate;
+
+void ICACHE_FLASH_ATTR TVTextHold()
+{
+	tvtext_hold = TVTEXT_HOLD_TICKS;
+	VideoTransmit( 0 );
+}
+
+void ICACHE_FLASH_ATTR TVTextShow()
+{
+	tvtext_hold = 0;
+	showstate = TVTEXT_SHOWSTATE;
+	VideoTransmit( 1 );
+}
+
+void ICACHE_FLASH_ATTR TVTextTick()
+{
+	if( tvtext_hold && !--tvtext_hold )
+	{
+		TVTextShow();
+	}
+}
 
 void ICACHE_FLASH_ATTR TVTextClear()
 {

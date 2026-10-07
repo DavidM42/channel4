@@ -537,6 +537,7 @@ If `CG` never arrives, the board ends the pause by itself, 8 seconds after the l
 The firmware has to know `CH` and `CG` for this. On a board with older firmware, leave the switch off.
 
 The script waits a tenth of a second after every command. With the signal off the board turns down most requests that follow each other at once: 4 of 30 were answered without a gap, 30 of 30 with a tenth of a second.
+
 ### Recipes from Mealie
 
 A second package shows a [Mealie](https://mealie.io) recipe on the TV, first the ingredients and then the steps. You start it from the recipe in Mealie and page through it from Home Assistant. It needs the package from step 3.

@@ -20,12 +20,13 @@ Solder a wire to the RX pin, flash the board, tune an old TV to channel E4 and w
 - **It broadcasts on European channel E4** (62.5 MHz) instead of US channel 3 (61.25 MHz), hence the name.
 - **Black and white mode.** `MONOCHROME` leaves out all NTSC color information. The colors become clean shades of gray instead of hatching.
 - **Optional bright border** for TVs that show dark screens as gray.
+- **A steady PAL picture.** `NO_INTERLACE` stops the picture from jumping up and down by half a line, see [No interlacing](#no-interlacing).
 - **Text from Home Assistant.** A text screen that you fill over WiFi, with a ready-made Home Assistant package.
 - **It stays on your WiFi.** channel3 switches back to its own access point at every start. This fork does not.
 - **A silent start.** With `START_SILENT` the TV signal only starts when something asks for a screen, and a command stops it again, see [Signal only when needed](#signal-only-when-needed).
 - **Updates over WiFi that check their work.** New firmware goes on over the network, is verified and only then takes over, see [Updating over WiFi](#updating-over-wifi).
 - **A filter for the antenna pin.** The TV signal jams the board's own WiFi. Two small parts at the pin fix most of that, see [WiFi and the TV signal](#wifi-and-the-tv-signal).
-- **PAL and black and white are switched on by default** in `user.cfg`.
+- **PAL, black and white and no interlacing are switched on by default** in `user.cfg`.
 - **Setup, build and flash instructions** for macOS and Linux, below.
 
 Everything else, including the web interface and the demo screens, is channel3.
@@ -227,6 +228,7 @@ All of these are lines in `user.cfg`. A `#` in front switches a line off.
 |---|---|
 | `OPTS += -DPAL` | PAL timing: 625 lines, 50 fields per second. Off means NTSC. |
 | `OPTS += -DMONOCHROME` | Black and white only. No colorburst, and the colors become shades of gray. |
+| `OPTS += -DNO_INTERLACE` | PAL only. Draws both fields on the same TV lines, so the picture stands still. See [No interlacing](#no-interlacing). |
 | `OPTS += -DFBH=264` | Full height PAL picture, 264 lines instead of 220. The web page then runs out of memory, see [Picture size and memory](#picture-size-and-memory). |
 | `OPTS += -DWHITE_BORDER` | Paints the visible area left, right and above the picture bright instead of black. |
 | `OPTS += -DBORDER_LEVEL=13` | How bright that border is. Only used together with `WHITE_BORDER`. |
@@ -247,6 +249,14 @@ With `MONOCHROME` there is no colorburst, and colors 0 to 15 become plain grays:
 A single pin can only be on or off, so only a few brightness levels come out clean. On channel E4 that is 8 grays between black and white, and some neighboring color numbers share a gray.
 
 Both color tables live in `tablemaker/broadcast_tables.c`. The option picks one of them.
+
+### No interlacing
+
+A PAL picture is sent as two fields, and a TV draws the second one half a line below the first. channel3 sends the same picture in both, so everything jumps up and down by half a line, 25 times a second. On text that shows as a fine flicker, most of all on horizontal strokes.
+
+With `NO_INTERLACE` the second field starts on a full line instead of half a line later, and the TV draws it on top of the first. Old home computers did the same. A field is then 312 lines instead of 312.5, and nothing of the picture is lost.
+
+It is switched on in `user.cfg`. Take it out if your TV does not hold the picture with it. It only changes PAL, the NTSC signal is as it was.
 
 ### Bright border
 

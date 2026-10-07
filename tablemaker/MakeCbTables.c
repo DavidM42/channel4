@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <stdint.h>
 
 #define PAL_LINES 625
@@ -12,6 +13,22 @@
 #define FT_LIN_d 5
 #define FT_CLOSE_d 6
 #define FT_MAX_d 7
+
+//Writes a line table to CbTable.c, two lines to a byte.
+static void WriteTable( FILE * f, const char * name, const uint8_t * table, int lines )
+{
+	int x;
+	fprintf( f, "uint8_t %s[%d] = {", name, (lines+1)/2 );
+	for( x = 0; x < (lines+1)/2; x++ )
+	{
+		if( (x & 0x0f) == 0 )
+		{
+			fprintf( f, "\n\t" );
+		}
+		fprintf( f, "0x%02x, ", table[x*2+0] | ( table[x*2+1]<<4 ) );
+	}
+	fprintf( f, "};\n" );
+}
 
 int main()
 {
@@ -57,6 +74,18 @@ int main()
 		CbLookupPAL[x] = FT_STA_d;
 	CbLookupPAL[x++] = FT_CLOSE_d;
 	CbLookupPAL[x++] = FT_CLOSE_d;
+
+// PAL without interlacing (NO_INTERLACE)
+	//Above, the second field starts half a line late, which is what makes a TV draw it between the lines of the
+	//first one.  Both fields show the same framebuffer, so the picture jumps up and down by half a line 25 times
+	//a second.  Here the second field is a copy of the first.  It starts on a full line and lands on the same
+	//TV lines.  That is 312 lines per field, like the home computers did it, and 624 per frame.
+	uint8_t CbLookupPALNoInterlace[PAL_LINES+1];
+	memset( CbLookupPALNoInterlace, 0, sizeof(CbLookupPALNoInterlace) );
+	for( x = 0; x < 312; x++ )
+		CbLookupPALNoInterlace[x] = CbLookupPALNoInterlace[x+312] = CbLookupPAL[x];
+	CbLookupPALNoInterlace[623] = FT_CLOSE_d; //Ends the frame.  On the TV it is the same line as the FT_STA it replaces.
+	CbLookupPALNoInterlace[624] = FT_CLOSE_d;
 
 // NTSC
 	//Because we're odd, we have to extend this by one byte.
@@ -131,27 +160,12 @@ uint8_t CbLookupNTSC[%d];\n\
 	f = fopen( "CbTable.c", "w" );
 	fprintf( f, "#include \"CbTable.h\"\n\n" );
 
-	fprintf( f, "uint8_t CbLookupPAL[%d] = {", (PAL_LINES+1)/2 );
-	for( x = 0; x < (PAL_LINES+1)/2; x++ )
-	{
-		if( (x & 0x0f) == 0 )
-		{
-			fprintf( f, "\n\t" );
-		}
-		fprintf( f, "0x%02x, ", CbLookupPAL[x*2+0] | ( CbLookupPAL[x*2+1]<<4 ) );
-	}
-	fprintf( f, "};\n" );
-
-	fprintf( f, "uint8_t CbLookupNTSC[%d] = {", (NTSC_LINES+1)/2 );
-	for( x = 0; x < (NTSC_LINES+1)/2; x++ )
-	{
-		if( (x & 0x0f) == 0 )
-		{
-			fprintf( f, "\n\t" );
-		}
-		fprintf( f, "0x%02x, ", CbLookupNTSC[x*2+0] | ( CbLookupNTSC[x*2+1]<<4 ) );
-	}
-	fprintf( f, "};\n" );
+	fprintf( f, "#ifdef NO_INTERLACE\n" );
+	WriteTable( f, "CbLookupPAL", CbLookupPALNoInterlace, PAL_LINES );
+	fprintf( f, "#else\n" );
+	WriteTable( f, "CbLookupPAL", CbLookupPAL, PAL_LINES );
+	fprintf( f, "#endif\n" );
+	WriteTable( f, "CbLookupNTSC", CbLookupNTSC, NTSC_LINES );
 
 	return 0;
 }

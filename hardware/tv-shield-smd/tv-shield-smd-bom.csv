@@ -1,0 +1,7 @@
+Comment,Designator,Footprint,LCSC Part #,Quantity,Description,Manufacturer,Manufacturer Part #
+100R,R3,0603,C22775,1,"Resistor, 100 ohm, 0603, 1 %",UNI-ROYAL,0603WAF1000T5E
+2k2,R1,0603,C4190,1,"Resistor, 2.2 kohm, 0603, 1 %",UNI-ROYAL,0603WAF2201T5E
+75R,R2,0603,C4275,1,"Resistor, 75 ohm, 0603, 1 %",UNI-ROYAL,0603WAF750JT5E
+10p,C2,0603,C1634,1,"Ceramic capacitor, 10 pF, 50 V, C0G, 0603",Samsung,CL10C100JB8NNNC
+1u,C1,0603,C15849,1,"Ceramic capacitor, 1 uF, 50 V, X5R, 0603",Samsung,CL10A105KB8NNNC
+3.5 mm socket,J3,PJ-320D,C431535,1,"3.5 mm socket, 4 contacts, surface-mount",SHOU HAN,PJ-320D

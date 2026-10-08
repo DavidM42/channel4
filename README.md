@@ -336,7 +336,7 @@ GND ───────────┴───────────┴─�
 - **75 ohms** to ground match the cable.
 - **The capacitor** keeps DC from flowing between the board and the TV. On an electrolytic one the plus side goes towards the board.
 
-[hardware/tv-shield](hardware/tv-shield/) has a board for these parts that sits on a D1 Mini. It has not been made yet.
+[hardware/tv-shield](hardware/tv-shield/) has a board for these parts that sits on a D1 Mini, to solder yourself. [hardware/tv-shield-smd](hardware/tv-shield-smd/) is the same board with surface-mount parts, for having it assembled. Neither has been made yet.
 
 Good to know:
 

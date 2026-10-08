@@ -57,9 +57,26 @@ Send [tv-shield-gerbers.zip](tv-shield-gerbers.zip) to a board maker. Two layers
 | `.gm1` | Outline, with a notch for the collar of the socket |
 | `.drl` | Holes |
 
+## Having it assembled
+
+Two more files are for a service that also solders the parts:
+
+| File | What it is |
+|---|---|
+| [tv-shield-bom.csv](tv-shield-bom.csv) | The parts, with the column names JLCPCB reads. Other services take the same file. |
+| [tv-shield-positions.csv](tv-shield-positions.csv) | Where each part goes, measured to the middle of its legs. |
+
+What to know before you ask for a price:
+
+- **Two parts have an LCSC number**, the socket (C20182914) and a 1 µF electrolytic capacitor for C1 (C841716), the kind this circuit was tried with. Both were looked up, stock and price were not. The capacitor has its legs 2 mm apart and goes into the top and the middle hole, plus side at the top.
+- **The three resistors and the 10 pF capacitor have none.** I did not find these exact values as through-hole parts in a search from outside the shop. JLCPCB lets you pick a part for such a line after the upload. The description in the list says what to look for.
+- **The pin rows are in neither file.** Which way round they go depends on how you stack the boards, and a D1 Mini comes with pins. You solder those yourself.
+- **Every part here is through-hole.** Services charge more for those than for surface-mount parts, often per solder joint. For a batch that is assembled for you, compare with [the surface-mount version](../tv-shield-smd/) of this board.
+- **The positions were not checked against a service's preview.** Look at the preview they show before you order, and turn a part there if it sits the wrong way.
+
 ## Changing it
 
-The board is drawn by [make_board.py](make_board.py), all positions are in it. It needs the Python that comes with KiCad 9. Without KiCad installed, the container does it:
+The board is drawn by [make_board.py](make_board.py), all positions and the parts list are in it. It needs the Python that comes with KiCad 9. Without KiCad installed, the container does it:
 
 ```sh
 docker run --rm --platform linux/amd64 -v "$PWD":/work -w /work kicad/kicad:9.0 sh -c '

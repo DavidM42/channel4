@@ -11,3 +11,6 @@ web/execute_reflash
 
 # Debug symbols macOS puts next to them
 *.dSYM/
+
+# What KiCad remembers about your last look at a board
+*.kicad_prl

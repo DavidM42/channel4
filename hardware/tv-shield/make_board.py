@@ -4,9 +4,14 @@
 Run it with the Python that comes with KiCad 9 (it needs the pcbnew module and KiCad's footprint libraries):
     python3 make_board.py tv-shield.kicad_pcb
 
+Next to the board it writes the two lists an assembly service asks for: tv-shield-bom.csv (the parts) and
+tv-shield-positions.csv (where they go).
+
 The board is looked at from the top, with the antenna end of the D1 Mini at the top and its USB socket at the bottom.
 All positions are in millimeters from the top left corner.
 """
+import csv
+import os
 import sys
 import pcbnew
 from pcbnew import FromMM, VECTOR2I
@@ -17,6 +22,22 @@ ROW_L, ROW_R = 1.37, 24.23         # the two pin rows, 22.86 mm apart
 PIN1_Y, PITCH = 2.0, 2.54
 LEFT = ["RST", "A0", "D0", "D5", "D6", "D7", "D8", "3V3"]   # antenna end first
 RIGHT = ["TX", "RX", "D1", "D2", "D3", "D4", "GND", "5V"]
+
+# The parts to buy.  The column names are the ones JLCPCB reads, other services take the same file.
+# An LCSC number is only given where the part was looked up.  For the rest the value and size are enough to pick one.
+# The pin rows are in neither list.  They are left to you: which way round they go depends on how you stack the
+# boards, and a D1 Mini comes with them.  A part that is in this list but not in the positions file makes JLCPCB
+# stop with "designators don't exist in the CPL file".
+PARTS = {
+    "R3": ("100R", "Resistor, 100 ohm, 1/4 W, axial, 6.3 x 2.5 mm, 1 % or 5 %", "Axial 7.62 mm", "", "", ""),
+    "R1": ("2k2", "Resistor, 2.2 kohm, 1/4 W, axial, 6.3 x 2.5 mm, 1 % or 5 %", "Axial 7.62 mm", "", "", ""),
+    "R2": ("75R", "Resistor, 75 ohm, 1/4 W, axial, 6.3 x 2.5 mm, 1 % or 5 %", "Axial 7.62 mm", "", "", ""),
+    "C2": ("10p", "Ceramic capacitor, 10 pF, 50 V, NP0, legs 2.54 mm apart", "Radial 2.54 mm", "", "", ""),
+    "C1": ("1u", "Electrolytic capacitor, 1 uF, 50 V, 5 x 11 mm, legs 2 mm apart, plus side into the hole marked +",
+           "Radial 5 mm", "Nippon Chemi-Con", "EKY-500ELL1R0ME11D", "C841716"),
+    "J3": ("3.5 mm socket", "3.5 mm stereo socket, through-hole, right angle", "CUI SJ1-3523N",
+           "Same Sky (CUI)", "SJ1-3523N", "C20182914"),
+}
 
 board = pcbnew.BOARD()
 
@@ -164,6 +185,8 @@ pads.SetReference("J4")
 pads.SetValue("cable")
 pads.Reference().SetVisible(False)
 pads.Value().SetVisible(False)
+pads.SetExcludedFromBOM(True)
+pads.SetExcludedFromPosFiles(True)
 pads.SetPosition(P(2.7, 22.9))
 board.Add(pads)
 round_pad(pads, "1", 2.7, 22.9, OUT, 2.0, 1.1)
@@ -210,6 +233,33 @@ text("RX-100R-2k2-C1-TV", W / 2, 13.9, 0.8, layer=pcbnew.B_SilkS)
 text("10p, 75R to GND", W / 2, 18.6, 0.8, layer=pcbnew.B_SilkS)
 
 pcbnew.SaveBoard(sys.argv[1], board)
+
+# The lists for an assembly service
+folder = os.path.dirname(os.path.abspath(sys.argv[1]))
+with open(os.path.join(folder, "tv-shield-bom.csv"), "w", newline="") as f:
+    out = csv.writer(f)
+    out.writerow(["Comment", "Designator", "Footprint", "LCSC Part #", "Quantity", "Description", "Manufacturer",
+                  "Manufacturer Part #"])
+    rows = {}
+    for ref, (value, description, size, maker, part, lcsc) in PARTS.items():
+        rows.setdefault((value, size, lcsc, description, maker, part), []).append(ref)
+    for (value, size, lcsc, description, maker, part), refs in rows.items():
+        out.writerow([value, ",".join(refs), size, lcsc, len(refs), description, maker, part])
+with open(os.path.join(folder, "tv-shield-positions.csv"), "w", newline="") as f:
+    out = csv.writer(f)
+    out.writerow(["Designator", "Mid X", "Mid Y", "Layer", "Rotation"])
+    for fp in board.GetFootprints():
+        ref = fp.GetReference()
+        if ref in PARTS:
+            # The middle of the part is the middle of its pins.  Y counts upwards here, as in the Gerber files.
+            holes = [p.GetPosition() for p in fp.Pads() if p.GetAttribute() == pcbnew.PAD_ATTRIB_PTH]
+            if ref == "C1":
+                # The part in the list has its legs 2 mm apart, so it sits in the top and the middle hole.
+                holes = sorted(holes, key=lambda h: h.y)[:2]
+            xs = [pcbnew.ToMM(h.x) for h in holes]
+            ys = [pcbnew.ToMM(h.y) for h in holes]
+            out.writerow([ref, "%.2f" % ((min(xs) + max(xs)) / 2), "%.2f" % -((min(ys) + max(ys)) / 2), "Top",
+                          "%g" % fp.GetOrientationDegrees()])
 
 # Fill the ground area.  On a board that was just built in memory the zone filler crashes, on a loaded one it works.
 board = pcbnew.LoadBoard(sys.argv[1])

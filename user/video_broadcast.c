@@ -413,15 +413,27 @@ void ICACHE_FLASH_ATTR VideoTransmit( int on )
 
 	if( on )
 	{
-		//A relay for the antenna gets switched on here.
 		PIN_FUNC_SELECT(PERIPHS_IO_MUX_U0RXD_U, FUNC_I2SO_DATA);
 	}
 	else
 	{
 		PIN_FUNC_SELECT(PERIPHS_IO_MUX_U0RXD_U, FUNC_U0RXD);
-		//A relay for the antenna gets switched off here.
 	}
 }
+
+#ifdef RELAY_GPIO
+#if RELAY_GPIO < 0 || RELAY_GPIO > 15 || RELAY_GPIO == 1 || RELAY_GPIO == 3 || ( RELAY_GPIO >= 6 && RELAY_GPIO <= 11 )
+#error RELAY_GPIO has to be one of 0, 2, 4, 5, 12, 13, 14, 15.  1 and 3 are the serial lines (3 carries the TV signal), 6 to 11 belong to the flash chip.
+#endif
+
+//Switches the relay.  It is not tied to the TV signal: the signal goes off and on while a screen is filled
+//(CH and CG), and the relay has to stay on through that.
+void ICACHE_FLASH_ATTR RelaySet( int on )
+{
+	MakePinGPIO( RELAY_GPIO );
+	GPIO_OUTPUT_SET( GPIO_ID_PIN( RELAY_GPIO ), on ? 1 : 0 );
+}
+#endif
 
 //Initialize I2S subsystem for DMA circular buffer use
 void ICACHE_FLASH_ATTR testi2s_init() {
@@ -499,8 +511,10 @@ void ICACHE_FLASH_ATTR testi2s_init() {
 #ifdef START_SILENT
 	//No signal until a command asks for something to be shown (see custom_commands.c)
 	VideoTransmit( 0 );
+	RelaySet( 0 );
 #else
 	VideoTransmit( 1 );
+	RelaySet( 1 );
 #endif
 //	PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO2_U, FUNC_I2SO_WS);
 //	PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTDO_U, FUNC_I2SO_BCK);

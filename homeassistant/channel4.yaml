@@ -2,7 +2,7 @@
 #
 # Setup
 #   1. Put the board on your home WiFi and give it a fixed IP address (see the README).
-#   2. Replace 192.168.1.50 below with that address. It appears six times.
+#   2. Replace 192.168.1.50 below with that address. It appears seven times.
 #   3. Copy this file to <config>/packages/channel4.yaml and make sure configuration.yaml has
 #        homeassistant:
 #          packages: !include_dir_named packages
@@ -17,6 +17,9 @@
 #   rest_command.channel4_stop   Stop the TV signal. The three commands above start it again.
 #   rest_command.channel4_hold   Pause the TV signal while a screen is filled. Lines do not start it again.
 #   rest_command.channel4_show   End that pause and show the text screen.
+#   rest_command.channel4_relay_off
+#                                Switch the relay off, if the firmware is built with one. Every command above
+#                                except stop switches it on again.
 #   input_boolean.channel4_pause_signal
 #                                Switch it on, and the message script pauses the TV signal while it sends.
 #                                The TV shows snow for a moment, but the screen is there much sooner,
@@ -56,6 +59,11 @@ rest_command:
   channel4_show:
     url: "http://192.168.1.50/d/issue?CG"
     timeout: 2
+
+  # The relay goes on by itself with everything that shows or changes a screen. This is the only way to switch it off.
+  channel4_relay_off:
+    url: "http://192.168.1.50/d/issue?CR"
+    timeout: 5
 
 input_boolean:
   channel4_pause_signal:

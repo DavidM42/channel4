@@ -42,5 +42,14 @@ extern uint8_t video_transmitting; //Is the TV signal on the RX pin right now?
 void ICACHE_FLASH_ATTR testi2s_init();
 void ICACHE_FLASH_ATTR VideoTransmit( int on ); //TV signal on the RX pin on (1) or off (0)
 
+//A relay on the pin RELAY_GPIO from user.cfg, for example for the power of the TV.  High is on.
+//Every command that shows or changes something switches it on, and only the command CR switches it off again
+//(see custom_commands.c).  Without RELAY_GPIO there is no relay, and this does nothing.
+#ifdef RELAY_GPIO
+void ICACHE_FLASH_ATTR RelaySet( int on );
+#else
+#define RelaySet( on )
+#endif
+
 #endif
 

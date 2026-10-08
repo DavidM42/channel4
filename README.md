@@ -24,6 +24,7 @@ Solder a wire to the RX pin, flash the board, tune an old TV to channel E4 and w
 - **Text from Home Assistant.** A text screen that you fill over WiFi, with a ready-made Home Assistant package.
 - **A pause for the TV signal while a screen is sent.** The TV signal slows the board's WiFi down so much that a full screen can take a minute. With the pause it takes a few seconds, see [Faster screens](#faster-screens).
 - **It stays on your WiFi.** channel3 switches back to its own access point at every start. This fork does not.
+- **A relay that follows the screen.** With `RELAY_GPIO` a pin goes high whenever something is shown, for example to switch the TV on, see [A relay](#a-relay).
 - **A silent start.** With `START_SILENT` the TV signal only starts when something asks for a screen, and a command stops it again, see [Signal only when needed](#signal-only-when-needed).
 - **Updates over WiFi that check their work.** New firmware goes on over the network, is verified and only then takes over, see [Updating over WiFi](#updating-over-wifi).
 - **A filter for the antenna pin.** The TV signal jams the board's own WiFi. Two small parts at the pin fix most of that, see [WiFi and the TV signal](#wifi-and-the-tv-signal).
@@ -234,6 +235,7 @@ All of these are lines in `user.cfg`. A `#` in front switches a line off.
 | `OPTS += -DFBH=264` | Full height PAL picture, 264 lines instead of 220. The web page then runs out of memory, see [Picture size and memory](#picture-size-and-memory). |
 | `OPTS += -DWHITE_BORDER` | Paints the visible area left, right and above the picture bright instead of black. |
 | `OPTS += -DBORDER_LEVEL=13` | How bright that border is. Only used together with `WHITE_BORDER`. |
+| `OPTS += -DRELAY_GPIO=5` | A relay on that pin, on whenever something is shown. 5 is D1 on a D1 Mini. See [A relay](#a-relay). |
 | `OPTS += -DSTART_SILENT` | No TV signal after power-up. It starts with the first text or demo command, see [Signal only when needed](#signal-only-when-needed). |
 
 After changing any of them: `make clean`, `make all`, flash.
@@ -302,6 +304,33 @@ Send the commands as `http://<board>/d/issue?CS` and so on, see [The commands be
 While the signal is off, no screens are drawn and the demo stands still. It carries on where it stopped, or from its first screen after `CD`. The part that makes the TV lines keeps running, so the picture is there at once when the signal comes on.
 
 Without `START_SILENT` the signal is on from the start, as in channel3. `CS` and the commands that start the signal again work either way.
+
+### A relay
+
+With `RELAY_GPIO` the board switches a relay, for example one that powers the TV. The pin goes high for on.
+
+| What | Relay |
+|---|---|
+| Every command that shows or changes something: `CT`, `CX`, `CD`, `CH`, `CG`, and `CO` and `CV` from the web page | on |
+| `CR` | off |
+
+Nothing else switches it off. `CS` and the pause while a screen is sent only stop the TV signal, the relay stays on through them. After power-up the relay is off with `START_SILENT`, and on without it, because the demo is showing then.
+
+The number is the GPIO, not the label on the board. On a D1 Mini these are free:
+
+| Label | `RELAY_GPIO` |
+|---|---|
+| D1 | 5 |
+| D2 | 4 |
+| D5 | 14 |
+| D6 | 12 |
+| D7 | 13 |
+
+0, 2 and 15 work too, but the board reads those pins when it starts, and a relay on them can keep it from starting. The build stops with a message for any other number.
+
+The pin gives 3.3 V and a few milliamps. That is enough for a relay module with its own transistor or optocoupler, not for a bare relay.
+
+`RELAY_GPIO=5` is switched on in `user.cfg`. With a `#` in front of the line there is no relay, and the pin is left alone.
 
 ## Antenna
 
@@ -469,7 +498,7 @@ The TV switches to the text screen and shows `Hello World` on the top line. The 
 
 ### 3. Add the package to Home Assistant
 
-1. Open [homeassistant/channel4.yaml](homeassistant/channel4.yaml) and replace `192.168.1.50` with the address of your board. It appears six times.
+1. Open [homeassistant/channel4.yaml](homeassistant/channel4.yaml) and replace `192.168.1.50` with the address of your board. It appears seven times.
 2. Copy the file to `packages/channel4.yaml` in your Home Assistant configuration folder.
 3. Make sure `configuration.yaml` loads packages:
 
@@ -486,7 +515,7 @@ The script is listed under its name, **TV: show message**. `script.channel4_mess
 
 ### 4. Use it
 
-The package gives you two scripts, six commands and a switch.
+The package gives you two scripts, seven commands and a switch.
 
 | Name | What it does |
 |---|---|
@@ -498,6 +527,7 @@ The package gives you two scripts, six commands and a switch.
 | `rest_command.channel4_stop` | Stops the TV signal. Any of the three above starts it again. |
 | `rest_command.channel4_hold` | Pauses the TV signal while a screen is filled. Lines and clearing do not start it again. |
 | `rest_command.channel4_show` | Ends the pause and shows the text screen. |
+| `rest_command.channel4_relay_off` | Switches [the relay](#a-relay) off. The commands that show something switch it on again. |
 | `input_boolean.channel4_pause_signal` | Switch it on and `script.channel4_message` pauses the TV signal while it sends, see [Faster screens](#faster-screens). |
 
 For example, as the action of an automation:
@@ -549,6 +579,7 @@ These are ordinary channel3 custom commands, so anything that can open a web add
 | `CS` | Stops the TV signal. `CT`, `CX`, `CD` and the web page start it again. | `CS` |
 | `CH` | Pauses the TV signal while a screen is filled. `CT` and `CX` do not start it again. The pause ends with `CG`, or by itself 8 seconds after the last of them. | `CH` |
 | `CG` | Ends the pause and shows the text screen, two tenths of a second later. | `CG` |
+| `CR` | Switches [the relay](#a-relay) off. Only in firmware built with `RELAY_GPIO`. | `CR` |
 | `CW` | Stores the WiFi network the board is on, if it is not stored yet. | `CW`, then four numbers: mode now, mode stored (1 is on a network, 2 is its own access point), 1 if the stored network is the one in use, free memory |
 
 The same commands also work as UDP packets to port 7878, without the address length limit below.

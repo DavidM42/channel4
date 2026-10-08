@@ -27,8 +27,29 @@ int ICACHE_FLASH_ATTR CustomCommand(char * buffer, int retsize, char *pusrdata, 
 		//CG lets the pause run out in two tenths of a second instead of ending it here, so that its reply
 		//gets out before the TV signal is back.  Otherwise the sender waits for a reply that got lost.
 		if( buffer[1] == 'H' ) TVTextHold(); else tvtext_hold = 2;
+		RelaySet( 1 );
 		return 2;
 	}
+
+#ifdef RELAY_GPIO
+	//cr   Switches the relay off.  It is the only thing that does.
+	//Every command that shows or changes something switches the relay on: CT, CX, CD, CH, CG, CO and CV.
+	//Both are outside of the switch below too, for the same reason.
+	{
+		char c = pusrdata[1] | 0x20;
+		if( c == 'r' )
+		{
+			RelaySet( 0 );
+			buffer[0] = 'C';
+			buffer[1] = 'R';
+			return 2;
+		}
+		if( c == 't' || c == 'x' || c == 'd' || c == 'o' || c == 'v' )
+		{
+			RelaySet( 1 );
+		}
+	}
+#endif
 
 	switch( pusrdata[1] )
 	{

@@ -35,8 +35,8 @@ PARTS = {
     "C2": ("10p", "Ceramic capacitor, 10 pF, 50 V, NP0, legs 2.54 mm apart", "Radial 2.54 mm", "", "", ""),
     "C1": ("1u", "Electrolytic capacitor, 1 uF, 50 V, 5 x 11 mm, legs 2 mm apart, plus side into the hole marked +",
            "Radial 5 mm", "Nippon Chemi-Con", "EKY-500ELL1R0ME11D", "C841716"),
-    "J3": ("3.5 mm socket", "3.5 mm stereo socket, through-hole, right angle", "CUI SJ1-3523N",
-           "Same Sky (CUI)", "SJ1-3523N", "C20182914"),
+    "J3": ("3.5 mm socket", "3.5 mm stereo socket, through-hole, right angle, Conrad 2366432", "TC-9465728",
+           "TRU Components", "TC-9465728", ""),
 }
 
 board = pcbnew.BOARD()
@@ -164,20 +164,35 @@ c1 = place("Capacitor_THT", "C_Disc_D5.0mm_W2.5mm_P5.00mm", "C1", "1n to 1u", C1
 connect(c1, {"1": MID, "2": OUT})
 round_pad(c1, "2", C1_X, C1_Y + 2.5, OUT, 1.6, 0.8)
 
-# J3: 3.5 mm socket, CUI SJ1-3523N, its opening at the bottom edge.  Round holes instead of the slots of the
-# library part, which not every board maker drills.  The part brings the piece of board edge it sits on with it,
-# with a notch for its collar, 4.5 mm below its middle.  The rest of the outline joins it on both sides.
-JX, JY = 12.8, H - 4.5
-jack = place("Connector_Audio", "Jack_3.5mm_CUI_SJ1-3523N_Horizontal", "J3", "SJ1-3523N", JX, JY, silk=False)
-outline([(JX - 6.5, H), (0, H), (0, 0), (W, 0), (W, H), (JX + 6.5, H)])
-for pad in jack.Pads():
-    if pad.GetNumber() in ("T", "R", "S"):
-        pad.SetShape(pcbnew.F_Cu, pcbnew.PAD_SHAPE_CIRCLE)
-        pad.SetSize(pcbnew.F_Cu, VECTOR2I(FromMM(2.4), FromMM(2.4)))
-        pad.SetDrillShape(pcbnew.PAD_DRILL_SHAPE_CIRCLE)
-        pad.SetDrillSize(VECTOR2I(FromMM(1.5), FromMM(1.5)))
-# The ring goes to ground as well: a mono plug shorts it to the sleeve anyway.
-connect(jack, {"T": OUT, "S": GND, "R": GND})
+# J3: 3.5 mm socket TRU Components TC-9465728 (Conrad 2366432), its opening at the bottom edge.
+# The measures are from its data sheet, drawing MJ-8435.  The body is 6 mm wide and 11.5 mm long.  The two legs of
+# the tip spring are 5.5 mm behind its front and 5.5 mm apart, sleeve and ring 11 mm behind it and 4.4 mm apart.
+# The collar in front of the body is 6 mm across and the body only 5 mm high, so the collar reaches below the top of
+# the board and has to hang over the edge.  The body stands 0.3 mm over the edge to make sure of that.
+# Round holes instead of the slots of the data sheet, which not every board maker drills.
+JX, FRONT = 12.8, H + 0.3
+TIP_Y, REAR_Y = FRONT - 5.5, FRONT - 11.0
+outline([(0, 0), (W, 0), (W, H), (0, H), (0, 0)])
+jack = pcbnew.FOOTPRINT(board)
+jack.SetReference("J3")
+jack.SetValue("TC-9465728")
+jack.Reference().SetVisible(False)
+jack.Value().SetVisible(False)
+jack.SetPosition(P(JX, (TIP_Y + REAR_Y) / 2))
+board.Add(jack)
+round_pad(jack, "T", JX - 2.75, TIP_Y, OUT, 2.4, 1.5)
+round_pad(jack, "T", JX + 2.75, TIP_Y, OUT, 2.4, 1.5)
+# The ring goes to ground like the sleeve: a mono plug shorts the two anyway.
+round_pad(jack, "S", JX + 2.2, REAR_Y, GND, 2.4, 1.5)
+round_pad(jack, "R", JX - 2.2, REAR_Y, GND, 2.4, 1.5)
+for layer, grow, front in ((pcbnew.F_Fab, 0, FRONT + 2.5), (pcbnew.F_CrtYd, 0.25, FRONT + 2.5)):
+    box = pcbnew.PCB_SHAPE(jack)
+    box.SetShape(pcbnew.SHAPE_T_RECT)
+    box.SetStart(P(JX - 3.0 - grow, FRONT - 11.5 - grow))
+    box.SetEnd(P(JX + 3.0 + grow, front + grow))
+    box.SetLayer(layer)
+    box.SetWidth(FromMM(0.1 if layer == pcbnew.F_Fab else 0.05))
+    jack.Add(box)
 
 # J4: two holes for a cable that is soldered on instead of the socket
 pads = pcbnew.FOOTPRINT(board)
@@ -199,8 +214,8 @@ track(FIL, [(9.44, ROW_A), (RES_L, ROW_A), (RES_L, ROW_B)])
 track(MID, [(RES_R, ROW_B), (RES_R, ROW_C)])
 track(MID, [(RES_R, ROW_B + 1.55), (10.2, ROW_B + 1.55), (10.2, C1_Y), (C1_X, C1_Y)])
 track(OUT, [(C1_X, C1_Y + 2.5), (C1_X, TRUNK_Y)])
-track(OUT, [(5.6, TRUNK_Y), (JX + 5.0, TRUNK_Y), (JX + 5.0, JY - 5.0)])
-track(OUT, [(5.6, TRUNK_Y), (5.6, 20.4), (3.1, 22.9), (2.7, 22.9)])
+track(OUT, [(C1_X, TRUNK_Y), (C1_X, TIP_Y), (JX + 2.75, TIP_Y)])
+track(OUT, [(C1_X, TRUNK_Y), (5.6, TRUNK_Y), (5.6, 20.4), (3.1, 22.9), (2.7, 22.9)])
 
 zone = pcbnew.ZONE(board)
 zone.SetLayer(pcbnew.B_Cu)
@@ -225,12 +240,12 @@ text("10p", 8.2, 2.55, 0.8)
 text("C1", 6.9, C1_Y + 1.5, 0.8, "right")
 text("+", 6.9, C1_Y - 0.1, 1.0, "right")
 text("TV", 21.0, 23.6, 1.2)
-text("SJ1-3523N", JX, JY - 2.7, 0.8)
+text("TC-9465728", JX, (TIP_Y + REAR_Y) / 2, 0.8)
 text("TV", 2.3, 24.6, 0.8)
 text("GND", 5.6, 24.6, 0.8)
 text("channel4 TV shield", W / 2, 1.7, 1.0, layer=pcbnew.B_SilkS)
-text("RX-100R-2k2-C1-TV", W / 2, 13.9, 0.8, layer=pcbnew.B_SilkS)
-text("10p, 75R to GND", W / 2, 18.6, 0.8, layer=pcbnew.B_SilkS)
+text("RX-100R-2k2-C1-TV", W / 2, (TIP_Y + REAR_Y) / 2 - 0.7, 0.8, layer=pcbnew.B_SilkS)
+text("10p, 75R to GND", W / 2, (TIP_Y + REAR_Y) / 2 + 0.7, 0.8, layer=pcbnew.B_SilkS)
 
 pcbnew.SaveBoard(sys.argv[1], board)
 

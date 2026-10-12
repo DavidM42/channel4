@@ -30,14 +30,16 @@ GND ──────────────┴──────────�
 | R1 | 2.2 kΩ | 1 kΩ if the picture is snowy. 10 kΩ was too much here, the picture was gone. |
 | R2 | 75 Ω | 68 or 82 Ω work too. |
 | C1 | 1 nF to 1 µF | Ceramic or electrolytic. It has three holes: the top one, marked `+`, and either the middle one (2.5 mm apart) or the bottom one (5 mm apart). The plus side of an electrolytic goes into the top hole. |
-| J3 | CUI SJ1-3523N | 3.5 mm socket, optional. For a cable with a plug at both ends. |
+| J3 | TRU Components TC-9465728 | 3.5 mm socket, optional. For a cable with a plug at both ends. Conrad sells it as item 2366432. |
 | Pins | 2 rows of 8, 2.54 mm | The ones that come with a D1 Mini. |
 
 The resistors are ordinary quarter watt ones, laid flat.
 
 **Without the socket:** solder the cable to the two holes at the bottom left instead, the inner wire to `TV` and the shield to `GND`.
 
-**The holes for the socket are round**, 1.5 mm, not the slots of the KiCad library part. Not every board maker cuts slots that narrow. The flat legs of the socket fit through.
+**The socket was drawn from its data sheet** (drawing MJ-8435), not tried with a real one. Before you order more than a few boards, hold a socket against the first one. Its holes are round, 1.5 mm, not the slots of the data sheet, because not every board maker cuts slots that narrow. The flat legs fit through.
+
+**The socket stands 0.3 mm over the edge of the board.** Its metal collar is wider than the body is high and would not clear the board otherwise.
 
 ## Which way round
 
@@ -54,7 +56,7 @@ Send [tv-shield-gerbers.zip](tv-shield-gerbers.zip) to a board maker. Two layers
 | `.gtl`, `.gbl` | Copper, top and bottom. The bottom is one ground area. |
 | `.gts`, `.gbs` | Solder mask |
 | `.gto`, `.gbo` | Printing |
-| `.gm1` | Outline, with a notch for the collar of the socket |
+| `.gm1` | Outline |
 | `.drl` | Holes |
 
 ## Having it assembled
@@ -68,7 +70,8 @@ Two more files are for a service that also solders the parts:
 
 What to know before you ask for a price:
 
-- **Two parts have an LCSC number**, the socket (C20182914) and a 1 µF electrolytic capacitor for C1 (C841716), the kind this circuit was tried with. Both were looked up, stock and price were not. The capacitor has its legs 2 mm apart and goes into the top and the middle hole, plus side at the top.
+- **Only C1 has an LCSC number**, a 1 µF electrolytic capacitor (C841716), the kind this circuit was tried with. It was looked up, stock and price were not. Its legs are 2 mm apart and go into the top and the middle hole, plus side at the top.
+- **The socket is the one from Conrad** and has no LCSC number. A service would have to get it from you, or you solder it in yourself.
 - **The three resistors and the 10 pF capacitor have none.** I did not find these exact values as through-hole parts in a search from outside the shop. JLCPCB lets you pick a part for such a line after the upload. The description in the list says what to look for.
 - **The pin rows are in neither file.** Which way round they go depends on how you stack the boards, and a D1 Mini comes with pins. You solder those yourself.
 - **Every part here is through-hole.** Services charge more for those than for surface-mount parts, often per solder joint. For a batch that is assembled for you, compare with [the surface-mount version](../tv-shield-smd/) of this board.
